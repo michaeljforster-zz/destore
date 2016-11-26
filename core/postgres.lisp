@@ -28,7 +28,7 @@
   (:import-from "LOCAL-TIME")
   (:import-from "POSTMODERN")
   (:import-from "POSTMODERNITY")
-  (:export "APPEND-DEVENT"
+  (:export "WRITE-DEVENT"
            "DSTREAM"
            "DSTREAM-UUID"
            "DSTREAM-VERSION"
@@ -68,29 +68,29 @@
 (defmethod cl-postgres:to-sql-string ((arg uuid:uuid))
   (princ-to-string arg))
 
-(defun append-devent (dstream-uuid
-                      dstream-type
-                      expected-version
-                      devent-uuid
-                      devent-type
-                      metadata
-                      payload
-                      dstream-type-key)
+(defun write-devent (dstream-uuid
+                     dstream-type
+                     dstream-type-key
+                     expected-version
+                     devent-uuid
+                     devent-type
+                     metadata
+                     payload)
   (postmodern:execute "BEGIN ISOLATION LEVEL SERIALIZABLE")
   (let ((transaction-finished-p nil))
     (unwind-protect
          (prog1
-           (postmodern:query
-              (:select (:destore.append-devent
+             (postmodern:query
+              (:select (:destore.write-devent
                         '$1 '$2 '$3 '$4 '$5 '$6 '$7 '$8))
               dstream-uuid
               dstream-type
+              dstream-type-key
               expected-version
               devent-uuid
               devent-type
               metadata
               payload
-              dstream-type-key            
               :single)
            (postmodern:execute "COMMIT")
            (setf transaction-finished-p t))
@@ -99,15 +99,15 @@
 
 (postmodernity:defpgstruct dstream
   uuid
-  version
   type
-  type-key)
+  type-key
+  version)
 
 (postmodern:defprepared list-all-dstreams
     (:select 'dstream-uuid
-             'version
              'dstream-type
              'dstream-type-key
+             'version
              :from (:destore.list-all-dstreams))
   :dstreams)
 

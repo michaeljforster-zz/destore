@@ -32,15 +32,15 @@ CREATE SCHEMA destore;
 -- devents.  The dstream and its type are recorded here. The dstream
 -- version must match that of the latest devent for the dstream (see
 -- destore.devent.version); the version serves as an optimistic
--- concurrency check (see destore.append_devent()).  Together,
+-- concurrency check (see destore.write_devent()).  Together,
 -- dstream_type and dstream_type_key support an optional secondary key
--- for the aggregate (see destore.append_devent()).
+-- for the aggregate (see destore.write_devent()).
 
 CREATE TABLE destore.dstream
 ( dstream_uuid uuid PRIMARY KEY
-, version integer NOT NULL
 , dstream_type varchar(255) NOT NULL CHECK (trim(dstream_type) <> '')
 , dstream_type_key varchar(255) -- can be null
+, version integer NOT NULL
 , UNIQUE(dstream_type, dstream_type_key)
 );
 
@@ -48,15 +48,15 @@ CREATE OR REPLACE FUNCTION destore.list_all_dstreams ()
 RETURNS SETOF destore.dstream AS $$
   SELECT
     dstream_uuid
-  , version
   , dstream_type
   , dstream_type_key
+  , version
   FROM destore.dstream;
 $$ LANGUAGE sql;
 
--- Each devent stored has an incremented version number, which
--- is unique and sequential only within the context of the given
--- dstream (see destore.dstream.version).
+-- Each devent stored has an incremented version number, which is
+-- unique and sequential only within the context of the given dstream
+-- (see destore.dstream.version).
 
 CREATE TABLE destore.devent
 ( devent_uuid uuid PRIMARY KEY
@@ -70,25 +70,26 @@ CREATE TABLE destore.devent
 , UNIQUE (dstream_uuid, version)
 );
 
--- The operation for appending an devent to a dstream. In adition to
--- the dstream's UUID and type, the caller must specify what is
--- expected to be the current version of the dstream--and of the latest
--- stored devent for the dstream. This constitutes an optimistic
--- concurrency check, and the versions of the appended devent will
--- increment from the version.
+-- The operation for writing an devent to a dstream. In adition to the
+-- dstream's UUID and type, the caller must specify what is expected
+-- to be the current version of the dstream--and of the latest stored
+-- devent for the dstream. This constitutes an optimistic concurrency
+-- check, and the versions of the writeed devent will increment from
+-- the version.
 -- 
 -- Note that this operation must be performed within a serializable
 -- transaction.
 
-CREATE OR REPLACE FUNCTION destore.append_devent
+CREATE OR REPLACE FUNCTION destore.write_devent
 ( the_dstream_uuid uuid
 , the_dstream_type varchar
+, the_dstream_type_key varchar(255)
 , expected_version integer
 , the_devent_uuid uuid
 , the_devent_type varchar(255)
 , the_metadata json -- jsonb not available in 9.3
 , the_payload json -- jsonb not available in 9.3
-, the_dstream_type_key varchar(255))
+)
 RETURNS integer AS $$
 DECLARE
   existing_dstream_type varchar;
@@ -111,9 +112,9 @@ BEGIN
   IF latest_version IS NULL THEN
     latest_version = 0;
     INSERT INTO destore.dstream
-    (dstream_uuid, version, dstream_type, dstream_type_key)
+    (dstream_uuid, dstream_type, dstream_type_key, version)
     VALUES
-    (the_dstream_uuid, latest_version, the_dstream_type, null);
+    (the_dstream_uuid, the_dstream_type, null, latest_version);
   END IF;
 
   IF expected_version != latest_version THEN

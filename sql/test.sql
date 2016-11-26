@@ -27,37 +27,37 @@ DELETE FROM destore.devent;
 DELETE FROM destore.dstream;
 
 BEGIN ISOLATION LEVEL SERIALIZABLE;
-SELECT destore.append_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', 0,
-       '28780637-3dc9-41d9-aec2-a644628f58b1'::uuid, 'com.example.test.cart-created', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "promotion-code": null, "catalogue-name": "Books"}', NULL);
-SELECT destore.append_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', 1,
-       '81626a0d-760b-44a7-99f0-a8cf03d0f09d'::uuid, 'com.example.test.cart-promotion-applied', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "promotion-code": "FREE BOOK"}', NULL);
-SELECT destore.append_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', 2,
-       '341822d6-420e-488c-965c-ad4caf137d27'::uuid, 'com.example.test.cart-promotion-applied', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "promotion-code": "2 FOR 1"}', NULL);
-SELECT destore.append_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', 3,
-       '499bd140-23c2-4834-a241-b3954d4949da'::uuid, 'com.example.test.cart-item-added', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "item": "Product 1"}', NULL);
-SELECT destore.append_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', 4,
-       '93f2766a-77eb-4294-a9c2-ef93b7f22530'::uuid, 'com.example.test.cart-item-added', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "item": "Product 2"}', NULL);
-SELECT destore.append_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', 5,
-       '5395bb9c-a85e-4233-b756-1c48f7743d36'::uuid, 'com.example.test.cart-item-deleted', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "item": "Product 1"}', NULL);
-SELECT destore.append_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', 6,
-       '4b4d2fc5-8c11-49ca-9f4f-8699a0a5daa4'::uuid, 'com.example.test.cart-payment-submitted', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "payment-type": "Credit Card"}', NULL);
-SELECT destore.append_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', 7,
-       '7f55ccd0-41e9-49b7-88a5-1a640282308f'::uuid, 'com.example.test.cart-payment-accepted', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "transauth": "ABC666"}', NULL);
+SELECT destore.write_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', NULL, 0,
+       '28780637-3dc9-41d9-aec2-a644628f58b1'::uuid, 'com.example.test.cart-created', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "promotion-code": null, "catalogue-name": "Books"}');
+SELECT destore.write_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', NULL, 1,
+       '81626a0d-760b-44a7-99f0-a8cf03d0f09d'::uuid, 'com.example.test.cart-promotion-applied', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "promotion-code": "FREE BOOK"}');
+SELECT destore.write_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', NULL, 2,
+       '341822d6-420e-488c-965c-ad4caf137d27'::uuid, 'com.example.test.cart-promotion-applied', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "promotion-code": "2 FOR 1"}');
+SELECT destore.write_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', NULL, 3,
+       '499bd140-23c2-4834-a241-b3954d4949da'::uuid, 'com.example.test.cart-item-added', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "item": "Product 1"}');
+SELECT destore.write_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', NULL, 4,
+       '93f2766a-77eb-4294-a9c2-ef93b7f22530'::uuid, 'com.example.test.cart-item-added', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "item": "Product 2"}');
+SELECT destore.write_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', NULL, 5,
+       '5395bb9c-a85e-4233-b756-1c48f7743d36'::uuid, 'com.example.test.cart-item-deleted', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "item": "Product 1"}');
+SELECT destore.write_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', NULL, 6,
+       '4b4d2fc5-8c11-49ca-9f4f-8699a0a5daa4'::uuid, 'com.example.test.cart-payment-submitted', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "payment-type": "Credit Card"}');
+SELECT destore.write_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', NULL, 7,
+       '7f55ccd0-41e9-49b7-88a5-1a640282308f'::uuid, 'com.example.test.cart-payment-accepted', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "transauth": "ABC666"}');
 COMMIT;
 
 BEGIN ISOLATION LEVEL SERIALIZABLE;
-SELECT destore.append_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', 1,
-       '81626a0d-760b-44a7-99f0-a8cf03d0f09d'::uuid, 'com.example.test.cart-promotion-applied', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "promotion-code": "BOGO"}', NULL);
+SELECT destore.write_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', NULL, 1,
+       '81626a0d-760b-44a7-99f0-a8cf03d0f09d'::uuid, 'com.example.test.cart-promotion-applied', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "promotion-code": "BOGO"}');
 COMMIT;
 
 BEGIN ISOLATION LEVEL SERIALIZABLE;
-SELECT destore.append_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', 8,
-       '81626a0d-760b-44a7-99f0-a8cf03d0f09d'::uuid, 'com.example.test.cart-promotion-applied', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "promotion-code": "BOGO"}', NULL);
+SELECT destore.write_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', NULL, 8,
+       '81626a0d-760b-44a7-99f0-a8cf03d0f09d'::uuid, 'com.example.test.cart-promotion-applied', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "promotion-code": "BOGO"}');
 COMMIT;
 
 BEGIN ISOLATION LEVEL SERIALIZABLE;
-SELECT destore.append_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', 8,
-       '03dd145c-d021-4753-b1fb-a78387811c5c'::uuid, 'com.example.test.cart-promotion-applied', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "promotion-code": "BOGO"}', NULL);
+SELECT destore.write_devent ('6ae72589-a908-46ec-b12d-83197c669e4c'::uuid, 'com.example.test.cart', NULL, 8,
+       '03dd145c-d021-4753-b1fb-a78387811c5c'::uuid, 'com.example.test.cart-promotion-applied', '{}', '{"cart-id": "6ae72589-a908-46ec-b12d-83197c669e4c", "promotion-code": "BOGO"}');
 COMMIT;
 
 BEGIN ISOLATION LEVEL SERIALIZABLE;
