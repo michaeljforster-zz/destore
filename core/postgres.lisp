@@ -80,7 +80,7 @@
   (let ((transaction-finished-p nil))
     (unwind-protect
          (prog1
-             (postmodern:query
+           (postmodern:query
               (:select (:destore.append-devent
                         '$1 '$2 '$3 '$4 '$5 '$6 '$7 '$8))
               dstream-uuid

@@ -36,7 +36,7 @@
                ;; and CL-POSTGRES packages be loaded to correctly
                ;; patch LOCAL-TIME. Thus, we must specify the
                ;; corresponding systems here rather than rely upon the
-               ;; IMPORT-FROM. Also, we musst register the system
+               ;; IMPORT-FROM. Also, we must register the system
                ;; packages below.
                "local-time"
                "postmodern"

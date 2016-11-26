@@ -25,6 +25,7 @@
 -- Isolate the devent store in its own schema to maintain a clear
 -- boundary with other database uses.
 -- HINT: set search_path to destore;
+
 CREATE SCHEMA destore;
 
 -- Every aggregate in the domain should be represented by a dstream of
@@ -185,12 +186,21 @@ RETURNS SETOF destore.devent AS $$
   ORDER BY version;
 $$ LANGUAGE sql;
 
+-- An aggregate can be reconstituted by replaying its devent history,
+-- but that will become more expensive as the number of devents
+-- grows. By periodically reconstituting an aggregate up to the latest
+-- devent and storing a versioned snapshot of the aggregate--a
+-- dsnapshot--subsequent reconstitutions need only begin with later
+-- devents, using the dsnapshot as a starting point.
+-- 
+-- The dsnapshot version must match that of the latest devent used to
+-- create the dstream's dsnapshot (see
+-- destore.dstream.version). Betware that this is not enforced by the
+-- database design.
+
 CREATE TABLE destore.dsnapshot
 ( dstream_uuid uuid NOT NULL
   REFERENCES destore.dstream ON UPDATE RESTRICT
--- This version number must match the version of the latest
--- domain_devent used to create the dstream's dsnapshot (see
--- destore.dstream.version). Betware that this is not enforced.
 , version integer NOT NULL
 , payload json NOT NULL -- jsonb not available in 9.3
 -- This is meta-data for debugging and other maintenance purposes.
