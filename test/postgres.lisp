@@ -25,17 +25,10 @@
 (defpackage "DESTORE/TEST/POSTGRES"
   (:use "CL"
         "LISP-UNIT"
-        "DESTORE/CORE/POSTGRES"))
+        "DESTORE/CORE/POSTGRES"
+        "DESTORE/TEST/SUPPORT"))
 
 (in-package "DESTORE/TEST/POSTGRES")
-
-(defparameter *connection-spec*
-  '("destore_test" "postgres" "" "localhost"))
-
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (defmacro with-connection (&body body)
-    `(postmodern:with-connection *connection-spec*
-       ,@body)))
 
 (defun fresh-uuid ()
   (uuid:make-v4-uuid))
@@ -49,14 +42,6 @@
 (defparameter *dstream-size-a* 100)
 
 (defparameter *dstream-size-b* 100)
-
-(defun purge-destore ()
-  (with-connection
-    (postmodern:query "BEGIN")
-    (postmodern:query "DELETE FROM destore.dsnapshot")
-    (postmodern:query "DELETE FROM destore.devent")
-    (postmodern:query "DELETE FROM destore.dstream")
-    (postmodern:query "COMMIT")))
 
 (defun populate-destore ()
   (with-connection
