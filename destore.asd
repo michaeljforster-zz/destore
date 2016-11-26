@@ -31,13 +31,24 @@
   :version "0.0.1"
   :class :package-inferred-system
   :defsystem-depends-on ("asdf-package-system")
-  :depends-on ("destore/core/all")
+  :depends-on ("destore/core/all"
+               ;; cl-postgres+local-time requires that the LOCAL-TIME
+               ;; and CL-POSTGRES packages be loaded to correctly
+               ;; patch LOCAL-TIME. Thus, we must specify the
+               ;; corresponding systems here rather than rely upon the
+               ;; IMPORT-FROM. Also, we musst register the system
+               ;; packages below.
+               "local-time"
+               "postmodern"
+               "cl-postgres+local-time")
   :in-order-to ((test-op (test-op "destore/test"))))
 
+(asdf:register-system-packages "cl-postgres+local-time" '("LOCAL-TIME"))
+
 (asdf:defsystem "destore/test"
-  :depends-on ("destore/test/all")
+  :depends-on ("destore/test/postgres")
   :perform (test-op (o c)
                     (uiop:symbol-call "LISP-UNIT"
                                       "RUN-TESTS"
                                       :all
-                                      "DESTORE/TEST/ALL")))
+                                      "DESTORE/TEST/POSTGRES")))

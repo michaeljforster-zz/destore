@@ -25,9 +25,4 @@
 (defpackage "DESTORE/CORE/ALL"
   (:nicknames "DESTORE/CORE")
   (:use "CL")
-  (:export "FOO"))
-
-(in-package "DESTORE/CORE/ALL")
-
-(defun foo ()
-  'foo)
+  (:import-from "DESTORE/CORE/POSTGRES"))
