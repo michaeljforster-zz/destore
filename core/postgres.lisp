@@ -144,7 +144,7 @@
             'stored-when
             'sequence-no
             :from (:destore.read-devents '$1 '$2))
-   (princ-to-string dstream-uuid)
+   dstream-uuid
    start-version)
   :devents)
 
@@ -158,7 +158,7 @@
                                                     version
                                                     payload)
   ((:select (:destore.write-dsnapshot '$1 '$2 '$3))
-   (princ-to-string dstream-uuid)
+   dstream-uuid
    version
    payload)
   :none)
@@ -169,5 +169,5 @@
             'payload
             'stored-when
             :from (:destore.read-last-dsnapshot '$1))
-   (princ-to-string dstream-uuid))
+   dstream-uuid)
   :dsnapshot)
