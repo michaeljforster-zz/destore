@@ -101,7 +101,7 @@
              :from (:destore.list-all-dstreams))
   :dstreams)
 
-(defun write-devent (dstream-uuid
+(defun write-devent (dstream
                      dstream-type-key
                      expected-version
                      devent-uuid
@@ -115,7 +115,7 @@
              (postmodern:query
               (:select (:destore.write-devent
                         '$1 '$2 '$3 '$4 '$5 '$6 '$7))
-              dstream-uuid
+              (dstream-uuid dstream)
               (as-db-null dstream-type-key)
               expected-version
               devent-uuid
@@ -150,7 +150,7 @@
              :from (:destore.list-all-devents))
   :devents)
 
-(postmodern:defprepared-with-names read-devents (dstream-uuid
+(postmodern:defprepared-with-names read-devents (dstream
                                                  start-version)
   ((:select 'devent-uuid
             'devent-type
@@ -161,7 +161,7 @@
             'stored-when
             'sequence-no
             :from (:destore.read-devents '$1 '$2))
-   dstream-uuid
+   (dstream-uuid dstream)
    start-version)
   :devents)
 
@@ -171,20 +171,20 @@
   payload
   stored-when)
 
-(postmodern:defprepared-with-names write-dsnapshot (dstream-uuid
+(postmodern:defprepared-with-names write-dsnapshot (dstream
                                                     version
                                                     payload)
   ((:select (:destore.write-dsnapshot '$1 '$2 '$3))
-   dstream-uuid
+   (dstream-uuid dstream)
    version
    payload)
   :none)
 
-(postmodern:defprepared-with-names read-last-dsnapshot (dstream-uuid)
+(postmodern:defprepared-with-names read-last-dsnapshot (dstream)
   ((:select 'dstream-uuid
             'version
             'payload
             'stored-when
             :from (:destore.read-last-dsnapshot '$1))
-   dstream-uuid)
+   (dstream-uuid dstream))
   :dsnapshot)
