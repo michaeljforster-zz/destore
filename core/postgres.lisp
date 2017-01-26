@@ -69,6 +69,9 @@
 (defmethod cl-postgres:to-sql-string ((arg uuid:uuid))
   (princ-to-string arg))
 
+(defun genuuid ()
+  (uuid:make-v4-uuid))
+
 (defun as-db-null (x)
   (if (null x)
       :null
@@ -80,13 +83,13 @@
   type-key
   version)
 
-(defun create-dstream (dstream-uuid dstream-type)
+(defun create-dstream (dstream-type)
   (postmodern:query (:select 'dstream-uuid
                              'dstream-type
                              'dstream-type-key
                              'version
                      :from (:destore.create-dstream '$1 '$2))
-                    dstream-uuid
+                    (genuuid)
                     dstream-type
                     :dstream))
 
