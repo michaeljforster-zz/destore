@@ -83,10 +83,10 @@ CREATE TABLE destore.devent
 CREATE OR REPLACE FUNCTION destore.write_devent
 ( the_dstream_uuid uuid
 , the_dstream_type varchar
-, the_dstream_type_key varchar(255)
+, the_dstream_type_key varchar
 , expected_version integer
 , the_devent_uuid uuid
-, the_devent_type varchar(255)
+, the_devent_type varchar
 , the_metadata json -- jsonb not available in 9.3
 , the_payload json -- jsonb not available in 9.3
 )
