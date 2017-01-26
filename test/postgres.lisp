@@ -36,16 +36,25 @@
 (defparameter *dstream-uuid-b*
   (fresh-uuid))
 
+(defparameter *dstream-uuid-c*
+  (fresh-uuid))
+
 (defparameter *dstream-size-a* 100)
 
 (defparameter *dstream-size-b* 100)
 
+(defun create-dstreams ()
+  (with-connection
+    (create-dstream *dstream-uuid-a* "com.example.dstream-type")
+    (create-dstream *dstream-uuid-b* "com.example.dstream-type")
+    (create-dstream *dstream-uuid-c* "com.example.dstream-another-type")))
+
 (defun populate-destore ()
   (with-connection
     (dotimes (i *dstream-size-a*)
-      (write-devent *dstream-uuid-a* "com.example.dstream-type-a" nil i (fresh-uuid) "com.example.devent-type" "{}" "{}"))
+      (write-devent *dstream-uuid-a* nil i (fresh-uuid) "com.example.devent-type" "{}" "{}"))
     (dotimes (i *dstream-size-b*)
-      (write-devent *dstream-uuid-b* "com.example.dstream-type-b" nil i (fresh-uuid) "com.example.devent-type" "{}" "{}"))))
+      (write-devent *dstream-uuid-b* nil i (fresh-uuid) "com.example.devent-type" "{}" "{}"))))
 
 (define-test empty-destore
   (purge-destore)
@@ -57,6 +66,7 @@
 
 (define-test list-all-devents-ascending-sequence-no
   (purge-destore)
+  (create-dstreams)
   (populate-destore)
   (let ((devents (with-connection (list-all-devents)))
         (sequence-no 0))
@@ -66,18 +76,21 @@
 
 (define-test read-devents-correct-count
   (purge-destore)
+  (create-dstreams)
   (populate-destore)
   (assert-equal *dstream-size-a* (length (with-connection (read-devents *dstream-uuid-a* 0))))
   (assert-equal *dstream-size-b* (length (with-connection (read-devents *dstream-uuid-b* 0)))))
 
 (define-test read-devents-correct-dstream
   (purge-destore)
+  (create-dstreams)
   (populate-destore)
   (assert-true (every #'(lambda (devent) (uuid:uuid= *dstream-uuid-a* (devent-dstream-uuid devent)))
                       (with-connection (read-devents *dstream-uuid-a* 0)))))
 
 (define-test read-devents-versions-monotonically-nondecreasing
   (purge-destore)
+  (create-dstreams)
   (populate-destore)
   (let ((initial-version 50))
     (let ((devents (with-connection (read-devents *dstream-uuid-a* initial-version)))
@@ -87,63 +100,62 @@
         (assert-true (<= version (devent-version devent)))
         (setf version (devent-version devent))))))
 
-(define-test write-devent-checks-dstream-type-rolls-back
-  (purge-destore)
-  (assert-error 'cl-postgres-error:check-violation (with-connection (write-devent *dstream-uuid-a* "" nil 0 (fresh-uuid) "com.example.devent-type" "{}" "{}")))
-  (assert-equal '() (with-connection (read-devents *dstream-uuid-a* 0)))
-  (purge-destore)
-  (with-connection (write-devent *dstream-uuid-a* "com.example.dstream-type-a" nil 0 (fresh-uuid) "com.example.devent-type" "{}" "{}"))
-  (assert-error 'cl-postgres:database-error (with-connection (write-devent *dstream-uuid-a* "" nil 1 (fresh-uuid) "com.example.devent-type" "{}" "{}")))
-  (let ((last-devent (first (last (with-connection (read-devents *dstream-uuid-a* 0))))))
-    (assert-equal 1 (devent-version last-devent))))
-
 (define-test write-devent-checks-dstream-type-key-rolls-back
   (purge-destore)
+  (create-dstreams)
   (let ((dstream-type-key "FOO"))
-    (with-connection (write-devent *dstream-uuid-a* "com.example.dstream-type-a" dstream-type-key 0 (fresh-uuid) "com.example.devent-type" "{}" "{}"))
-    (assert-error 'cl-postgres-error:unique-violation (with-connection (write-devent *dstream-uuid-b* "com.example.dstream-type-a" dstream-type-key 0 (fresh-uuid) "com.example.devent-type" "{}" "{}"))))  
+    (with-connection (write-devent *dstream-uuid-a* dstream-type-key 0 (fresh-uuid) "com.example.devent-type" "{}" "{}"))
+    (assert-error 'cl-postgres-error:unique-violation (with-connection (write-devent *dstream-uuid-b* dstream-type-key 0 (fresh-uuid) "com.example.devent-type" "{}" "{}")))
+    (assert-equal 1 (with-connection (write-devent *dstream-uuid-c* dstream-type-key 0 (fresh-uuid) "com.example.devent-type" "{}" "{}"))))
   (let ((last-devent (first (last (with-connection (read-devents *dstream-uuid-a* 0))))))
     (assert-equal 1 (devent-version last-devent)))
   (purge-destore)
+  (create-dstreams)
   (let ((dstream-type-key "FOO"))
-    (with-connection (write-devent *dstream-uuid-a* "com.example.dstream-type-a" nil 0 (fresh-uuid) "com.example.devent-type" "{}" "{}"))
-    (with-connection (write-devent *dstream-uuid-b* "com.example.dstream-type-a" dstream-type-key 0 (fresh-uuid) "com.example.devent-type" "{}" "{}"))
-    (assert-error 'cl-postgres-error:unique-violation (with-connection (write-devent *dstream-uuid-a* "com.example.dstream-type-a" dstream-type-key 1 (fresh-uuid) "com.example.devent-type" "{}" "{}"))))
+    (with-connection (write-devent *dstream-uuid-a* nil 0 (fresh-uuid) "com.example.devent-type" "{}" "{}"))
+    (with-connection (write-devent *dstream-uuid-b* dstream-type-key 0 (fresh-uuid) "com.example.devent-type" "{}" "{}"))
+    (assert-error 'cl-postgres-error:unique-violation (with-connection (write-devent *dstream-uuid-a* dstream-type-key 1 (fresh-uuid) "com.example.devent-type" "{}" "{}")))
+    (assert-equal 1 (with-connection (write-devent *dstream-uuid-c* dstream-type-key 0 (fresh-uuid) "com.example.devent-type" "{}" "{}"))))
   (let ((last-devent (first (last (with-connection (read-devents *dstream-uuid-a* 0))))))
     (assert-equal 1 (devent-version last-devent))))
 
 (define-test write-devent-checks-devent-type-rolls-back
   (purge-destore)
-  (with-connection (write-devent *dstream-uuid-a* "com.example.dstream-type-a" nil 0 (fresh-uuid) "com.example.devent-type" "{}" "{}"))
-  (assert-error 'cl-postgres-error:check-violation (with-connection (write-devent *dstream-uuid-a* "com.example.dstream-type-a" nil 1 (fresh-uuid) "" "{}" "{}")))
+  (create-dstreams)
+  (with-connection (write-devent *dstream-uuid-a* nil 0 (fresh-uuid) "com.example.devent-type" "{}" "{}"))
+  (assert-error 'cl-postgres-error:check-violation (with-connection (write-devent *dstream-uuid-a* nil 1 (fresh-uuid) "" "{}" "{}")))
   (let ((last-devent (first (last (with-connection (read-devents *dstream-uuid-a* 0))))))
     (assert-equal 1 (devent-version last-devent))))
 
 (define-test write-devent-checks-expected-version-rolls-back
   (purge-destore)
-  (assert-error 'cl-postgres:database-error (with-connection (write-devent *dstream-uuid-a* "com.example.dstream-type-a" nil 1 (fresh-uuid) "com.example.devent-type" "{}" "{}")))
+  (create-dstreams)
+  (assert-error 'cl-postgres:database-error (with-connection (write-devent *dstream-uuid-a* nil 1 (fresh-uuid) "com.example.devent-type" "{}" "{}")))
   (purge-destore)
-  (with-connection (write-devent *dstream-uuid-a* "com.example.dstream-type-a" nil 0 (fresh-uuid) "com.example.devent-type" "{}" "{}"))
-  (with-connection (write-devent *dstream-uuid-a* "com.example.dstream-type-a" nil 1 (fresh-uuid) "com.example.devent-type" "{}" "{}"))
-  (assert-error 'cl-postgres:database-error (with-connection (write-devent *dstream-uuid-a* "com.example.dstream-type-a" nil 1 (fresh-uuid) "com.example.devent-type" "{}" "{}")))
+  (create-dstreams)
+  (with-connection (write-devent *dstream-uuid-a* nil 0 (fresh-uuid) "com.example.devent-type" "{}" "{}"))
+  (with-connection (write-devent *dstream-uuid-a* nil 1 (fresh-uuid) "com.example.devent-type" "{}" "{}"))
+  (assert-error 'cl-postgres:database-error (with-connection (write-devent *dstream-uuid-a* nil 1 (fresh-uuid) "com.example.devent-type" "{}" "{}")))
   (let ((last-devent (first (last (with-connection (read-devents *dstream-uuid-a* 0))))))
     (assert-equal 2 (devent-version last-devent))))
 
 (define-test write-devent-checks-devent-uuid-rolls-back
   (purge-destore)
+  (create-dstreams)
   (let ((devent-uuid (fresh-uuid)))
-    (with-connection (write-devent *dstream-uuid-a* "com.example.dstream-type-a" nil 0 devent-uuid "com.example.devent-type" "{}" "{}"))
-    (assert-error 'cl-postgres-error:unique-violation (with-connection (write-devent *dstream-uuid-a* "com.example.dstream-type-a" nil 1 devent-uuid "com.example.devent-type" "{}" "{}"))))
+    (with-connection (write-devent *dstream-uuid-a* nil 0 devent-uuid "com.example.devent-type" "{}" "{}"))
+    (assert-error 'cl-postgres-error:unique-violation (with-connection (write-devent *dstream-uuid-a* nil 1 devent-uuid "com.example.devent-type" "{}" "{}"))))
   (let ((last-devent (first (last (with-connection (read-devents *dstream-uuid-a* 0))))))
     (assert-equal 1 (devent-version last-devent))))
 
 (define-test write-dsnapshot-checks-dstream-uuid
   (purge-destore)
-  (assert-error 'cl-postgres-error:foreign-key-violation (with-connection (write-dsnapshot (fresh-uuid) 1 "{}")))
-  (assert-error 'cl-postgres-error:foreign-key-violation (with-connection (write-dsnapshot *dstream-uuid-a* 1 "{}"))))
+  (assert-error 'cl-postgres:database-error (with-connection (write-dsnapshot (fresh-uuid) 1 "{}")))
+  (assert-error 'cl-postgres:database-error (with-connection (write-dsnapshot *dstream-uuid-a* 1 "{}"))))
   
 (define-test read-last-dsnapshot-reads-last
   (purge-destore)
+  (create-dstreams)
   (populate-destore)
   (with-connection
     (dotimes (i 100)

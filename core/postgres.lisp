@@ -28,13 +28,14 @@
   (:import-from "LOCAL-TIME")
   (:import-from "POSTMODERN")
   (:import-from "POSTMODERNITY")
-  (:export "WRITE-DEVENT"
+  (:export "CREATE-DSTREAM"
            "DSTREAM"
            "DSTREAM-UUID"
            "DSTREAM-VERSION"
            "DSTREAM-TYPE"
            "DSTREAM-TYPE-KEY"
            "LIST-ALL-DSTREAMS"
+           "WRITE-DEVENT"
            "DEVENT"
            "DEVENT-UUID"
            "DEVENT-TYPE"
@@ -73,8 +74,31 @@
       :null
       x))
 
+(postmodernity:defpgstruct dstream
+  uuid
+  type
+  type-key
+  version)
+
+(defun create-dstream (dstream-uuid dstream-type)
+  (postmodern:query (:select 'dstream-uuid
+                             'dstream-type
+                             'dstream-type-key
+                             'version
+                     :from (:destore.create-dstream '$1 '$2))
+                    dstream-uuid
+                    dstream-type
+                    :dstream))
+
+(postmodern:defprepared list-all-dstreams
+    (:select 'dstream-uuid
+             'dstream-type
+             'dstream-type-key
+             'version
+             :from (:destore.list-all-dstreams))
+  :dstreams)
+
 (defun write-devent (dstream-uuid
-                     dstream-type
                      dstream-type-key
                      expected-version
                      devent-uuid
@@ -87,9 +111,8 @@
          (prog1
              (postmodern:query
               (:select (:destore.write-devent
-                        '$1 '$2 '$3 '$4 '$5 '$6 '$7 '$8))
+                        '$1 '$2 '$3 '$4 '$5 '$6 '$7))
               dstream-uuid
-              dstream-type
               (as-db-null dstream-type-key)
               expected-version
               devent-uuid
@@ -101,20 +124,6 @@
            (setf transaction-finished-p t))
       (unless transaction-finished-p
         (postmodern:execute "ROLLBACK")))))
-
-(postmodernity:defpgstruct dstream
-  uuid
-  type
-  type-key
-  version)
-
-(postmodern:defprepared list-all-dstreams
-    (:select 'dstream-uuid
-             'dstream-type
-             'dstream-type-key
-             'version
-             :from (:destore.list-all-dstreams))
-  :dstreams)
 
 (postmodernity:defpgstruct devent
   uuid

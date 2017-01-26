@@ -44,6 +44,23 @@ CREATE TABLE destore.dstream
 , UNIQUE(dstream_type, dstream_type_key)
 );
 
+CREATE OR REPLACE FUNCTION destore.create_dstream
+( the_dstream_uuid uuid
+, the_dstream_type varchar
+)
+RETURNS destore.dstream AS $$
+DECLARE
+  row destore.dstream;
+BEGIN
+  INSERT INTO destore.dstream
+  (dstream_uuid, dstream_type, dstream_type_key, version)
+  VALUES
+  (the_dstream_uuid, the_dstream_type, null, 0)
+  RETURNING * INTO row;
+  RETURN row;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE OR REPLACE FUNCTION destore.list_all_dstreams ()
 RETURNS SETOF destore.dstream AS $$
   SELECT
@@ -82,7 +99,6 @@ CREATE TABLE destore.devent
 
 CREATE OR REPLACE FUNCTION destore.write_devent
 ( the_dstream_uuid uuid
-, the_dstream_type varchar
 , the_dstream_type_key varchar
 , expected_version integer
 , the_devent_uuid uuid
@@ -92,34 +108,19 @@ CREATE OR REPLACE FUNCTION destore.write_devent
 )
 RETURNS integer AS $$
 DECLARE
-  existing_dstream_type varchar;
   latest_version integer;
 BEGIN
-  existing_dstream_type = dstream_type FROM destore.dstream
-                   WHERE dstream_uuid = the_dstream_uuid;
-
-  IF existing_dstream_type IS NOT NULL
-  AND existing_dstream_type != the_dstream_type THEN
-    RAISE EXCEPTION
-          'Incorrect dstream_type: % does not match %',
-          the_dstream_type, existing_dstream_type ;
-
-  END IF;
-
   latest_version = version FROM destore.dstream
                    WHERE dstream_uuid = the_dstream_uuid;
-                   
+
+  -- Be more explicity than relying upon NOT NULL check.
   IF latest_version IS NULL THEN
-    latest_version = 0;
-    INSERT INTO destore.dstream
-    (dstream_uuid, dstream_type, dstream_type_key, version)
-    VALUES
-    (the_dstream_uuid, the_dstream_type, null, latest_version);
+    RAISE EXCEPTION 'Nonexistent dstream: UUID = %', the_dstream_uuid;
   END IF;
 
   IF expected_version != latest_version THEN
      RAISE EXCEPTION
-           'Concurrency problem: latest_version %; expected_version %',
+           'Concurrency problem: latest_version = %; expected_version = %',
            latest_version, expected_version;
   END IF;
 
@@ -142,12 +143,11 @@ BEGIN
   , latest_version
   , current_timestamp);
 
-  UPDATE destore.dstream SET dstream_type_key = the_dstream_type_key
+  UPDATE destore.dstream SET
+    dstream_type_key = the_dstream_type_key
+  , version = latest_version
   WHERE dstream_uuid = the_dstream_uuid;
 
-  UPDATE destore.dstream SET version = latest_version
-  WHERE dstream_uuid = the_dstream_uuid;
-  
   RETURN latest_version;
 END;
 $$ LANGUAGE plpgsql;
@@ -214,7 +214,17 @@ CREATE OR REPLACE FUNCTION destore.write_dsnapshot
 , the_version integer
 , the_payload json) -- jsbonb not available in 9.3
 RETURNS void AS $$
+DECLARE
+  exists_dstream boolean;
 BEGIN
+  exists_dstream = EXISTS (SELECT true FROM destore.dstream
+                   WHERE dstream_uuid = the_dstream_uuid);
+
+  -- Be more explicity than relying upon NOT NULL check.
+  IF NOT exists_dstream THEN
+    RAISE EXCEPTION 'Nonexistent dstream: UUID = %', the_dstream_uuid;
+  END IF;
+
   INSERT INTO destore.dsnapshot
   (dstream_uuid, version, payload, stored_when)
   VALUES
