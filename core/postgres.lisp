@@ -68,6 +68,11 @@
 (defmethod cl-postgres:to-sql-string ((arg uuid:uuid))
   (princ-to-string arg))
 
+(defun as-db-null (x)
+  (if (null x)
+      :null
+      x))
+
 (defun write-devent (dstream-uuid
                      dstream-type
                      dstream-type-key
@@ -85,7 +90,7 @@
                         '$1 '$2 '$3 '$4 '$5 '$6 '$7 '$8))
               dstream-uuid
               dstream-type
-              dstream-type-key
+              (as-db-null dstream-type-key)
               expected-version
               devent-uuid
               devent-type

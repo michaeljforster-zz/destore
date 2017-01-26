@@ -30,9 +30,6 @@
 
 (in-package "DESTORE/TEST/POSTGRES")
 
-(defun fresh-uuid ()
-  (uuid:make-v4-uuid))
-
 (defparameter *dstream-uuid-a*
   (fresh-uuid))
 
@@ -46,9 +43,9 @@
 (defun populate-destore ()
   (with-connection
     (dotimes (i *dstream-size-a*)
-      (write-devent *dstream-uuid-a* nil "com.example.dstream-type-a" i (fresh-uuid) "com.example.devent-type" "{}" "{}"))
+      (write-devent *dstream-uuid-a* "com.example.dstream-type-a" nil i (fresh-uuid) "com.example.devent-type" "{}" "{}"))
     (dotimes (i *dstream-size-b*)
-      (write-devent *dstream-uuid-b* nil "com.example.dstream-type-b" i (fresh-uuid) "com.example.devent-type" "{}" "{}"))))
+      (write-devent *dstream-uuid-b* "com.example.dstream-type-b" nil i (fresh-uuid) "com.example.devent-type" "{}" "{}"))))
 
 (define-test empty-destore
   (purge-destore)

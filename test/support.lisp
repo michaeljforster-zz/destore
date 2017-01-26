@@ -26,10 +26,14 @@
   (:use "CL"
         "LISP-UNIT")
   (:import-from "POSTMODERN")
-  (:export "WITH-CONNECTION"
+  (:export "FRESH-UUID"
+           "WITH-CONNECTION"
            "PURGE-DESTORE"))
 
 (in-package "DESTORE/TEST/SUPPORT")
+
+(defun fresh-uuid ()
+  (uuid:make-v4-uuid))
 
 (defparameter *connection-spec*
   '("destore_test" "postgres" "" "localhost"))
