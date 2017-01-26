@@ -104,7 +104,6 @@
 (defun write-devent (dstream
                      dstream-type-key
                      expected-version
-                     devent-uuid
                      devent-type
                      metadata
                      payload)
@@ -118,7 +117,7 @@
               (dstream-uuid dstream)
               (as-db-null dstream-type-key)
               expected-version
-              devent-uuid
+              (genuuid)
               devent-type
               metadata
               payload
