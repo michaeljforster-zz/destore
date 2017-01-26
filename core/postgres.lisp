@@ -35,6 +35,7 @@
            "DSTREAM-TYPE"
            "DSTREAM-TYPE-KEY"
            "LIST-ALL-DSTREAMS"
+           "FIND-DSTREAM"
            "WRITE-DEVENT"
            "DEVENT"
            "DEVENT-UUID"
@@ -100,6 +101,15 @@
              'version
              :from (:destore.list-all-dstreams))
   :dstreams)
+
+(postmodern:defprepared-with-names find-dstream (dstream-uuid)
+  ((:select 'dstream-uuid
+            'dstream-type
+            'dstream-type-key
+            'version
+            :from (:destore.find-dstream '$1))
+   dstream-uuid)
+  :dstream)
 
 (defun write-devent (dstream
                      dstream-type-key

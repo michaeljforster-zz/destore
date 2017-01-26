@@ -59,6 +59,18 @@
     (assert-equal '() (list-all-dstreams))
     (assert-equal '() (list-all-devents))))
 
+(define-test list-all-find-dstreams
+  (purge-destore)
+  (create-dstreams)
+  (populate-destore)
+  (with-connection
+    (let ((dstreams (list-all-dstreams)))
+      (let ((first-dstream (first dstreams)))
+        (let ((first-dstream-uuid (dstream-uuid first-dstream)))
+          (let ((found-dstream (find-dstream first-dstream-uuid)))
+            (assert-true (uuid:uuid= first-dstream-uuid
+                                     (dstream-uuid found-dstream)))))))))
+
 (define-test list-all-devents-ascending-sequence-no
   (purge-destore)
   (create-dstreams)

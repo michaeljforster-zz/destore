@@ -71,6 +71,23 @@ RETURNS SETOF destore.dstream AS $$
   FROM destore.dstream;
 $$ LANGUAGE sql;
 
+CREATE OR REPLACE FUNCTION destore.find_dstream (the_dstream_uuid uuid)
+RETURNS destore.dstream AS $$
+DECLARE
+  row destore.dstream;
+BEGIN
+  SELECT
+    dstream_uuid
+  , dstream_type
+  , dstream_type_key
+  , version
+  INTO row
+  FROM destore.dstream
+  WHERE dstream_uuid = the_dstream_uuid;
+  RETURN row;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Each devent stored has an incremented version number, which is
 -- unique and sequential only within the context of the given dstream
 -- (see destore.dstream.version).
