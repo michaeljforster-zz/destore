@@ -25,7 +25,8 @@
 (defpackage "DESTORE/CORE/HIGH-LEVEL"
   (:use "CL")
   (:import-from "DESTORE/CORE/POSTGRES")
-  (:export "RECONSTITUTE"))
+  (:export "RECONSTITUTE"
+           "PROJECT"))
 
 (in-package "DESTORE/CORE/HIGH-LEVEL")
 
@@ -50,3 +51,12 @@
                  (funcall function accumulator next)))
           (let ((result (reduce #'reducer history :initial-value initial-value)))
             (values result last-version)))))))
+
+(defun project (function initial-value dstream &key (start-version 0))
+  (let ((history (destore/core/postgres:read-devents dstream start-version))
+        (last-version start-version))
+    (flet ((reducer (accumulator next)
+             (setf last-version (destore/core/postgres:devent-version next))
+             (funcall function accumulator next)))
+      (let ((result (reduce #'reducer history :initial-value initial-value)))
+        (values result last-version)))))
