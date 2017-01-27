@@ -30,7 +30,7 @@
 
 (in-package "DESTORE/CORE/HIGH-LEVEL")
 
-(defun default-start-version (dsnapshot)
+(defun default-last-version (dsnapshot)
   (if (null dsnapshot)
       0
       (destore/core/postgres:dsnapshot-version dsnapshot)))
@@ -42,21 +42,23 @@
 
 (defun reconstitute (function initial-value dstream)
   (let ((last-dsnapshot (destore/core/postgres:read-last-dsnapshot dstream)))
-    (let ((start-version (default-start-version last-dsnapshot))
+    (let ((last-version (default-last-version last-dsnapshot))
           (initial-value (default-initial-value last-dsnapshot initial-value)))
-      (let ((history (destore/core/postgres:read-devents dstream start-version))
-            (last-version start-version))
+      (let ((history (destore/core/postgres:read-devents dstream (1+ last-version))))
         (flet ((reducer (accumulator next)
                  (setf last-version (destore/core/postgres:devent-version next))
                  (funcall function accumulator next)))
           (let ((result (reduce #'reducer history :initial-value initial-value)))
             (values result last-version)))))))
 
-(defun project (function initial-value dstream &key (start-version 0))
+(defun project (function initial-value dstream &key (start-version 1))
   (let ((history (destore/core/postgres:read-devents dstream start-version))
-        (last-version start-version))
+        (last-version (1- start-version))) ; Consistent with RECONSTITUTE
     (flet ((reducer (accumulator next)
              (setf last-version (destore/core/postgres:devent-version next))
              (funcall function accumulator next)))
       (let ((result (reduce #'reducer history :initial-value initial-value)))
-        (values result last-version)))))
+        (values result
+                (if (null result)
+                    0
+                    last-version))))))
