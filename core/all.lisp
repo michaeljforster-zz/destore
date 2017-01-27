@@ -22,7 +22,7 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ;;; SOFTWARE.
 
-(defpackage "DESTORE/CORE/ALL"
+(uiop:define-package "DESTORE/CORE/ALL"
   (:nicknames "DESTORE/CORE")
-  (:use "CL")
-  (:import-from "DESTORE/CORE/POSTGRES"))
+  (:use-reexport "DESTORE/CORE/POSTGRES"
+                 "DESTORE/CORE/HIGH-LEVEL"))
