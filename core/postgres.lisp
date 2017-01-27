@@ -78,6 +78,19 @@
       :null
       x))
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defmacro with-serializable-isolation (&body body)
+    `(progn
+       (postmodern:execute "BEGIN ISOLATION LEVEL SERIALIZABLE")
+       (let ((transaction-finished-p nil))
+         (unwind-protect
+              (prog1
+                  ,@body
+                (postmodern:execute "COMMIT")
+                (setf transaction-finished-p t))
+           (unless transaction-finished-p
+             (postmodern:execute "ROLLBACK")))))))
+
 (postmodernity:defpgstruct dstream
   uuid
   type
@@ -85,14 +98,15 @@
   version)
 
 (defun create-dstream (dstream-type)
-  (postmodern:query (:select 'dstream-uuid
-                             'dstream-type
-                             'dstream-type-key
-                             'version
-                     :from (:destore.create-dstream '$1 '$2))
-                    (genuuid)
-                    dstream-type
-                    :dstream))
+  (with-serializable-isolation
+      (postmodern:query (:select 'dstream-uuid
+                                 'dstream-type
+                                 'dstream-type-key
+                                 'version
+                                 :from (:destore.create-dstream '$1 '$2))
+                        (genuuid)
+                        dstream-type
+                        :dstream)))
 
 (postmodern:defprepared list-all-dstreams
     (:select 'dstream-uuid
@@ -117,25 +131,17 @@
                      devent-type
                      metadata
                      payload)
-  (postmodern:execute "BEGIN ISOLATION LEVEL SERIALIZABLE")
-  (let ((transaction-finished-p nil))
-    (unwind-protect
-         (prog1
-             (postmodern:query
-              (:select (:destore.write-devent
-                        '$1 '$2 '$3 '$4 '$5 '$6 '$7))
-              (dstream-uuid dstream)
-              (as-db-null dstream-type-key)
-              expected-version
-              (genuuid)
-              devent-type
-              metadata
-              payload
-              :single)
-           (postmodern:execute "COMMIT")
-           (setf transaction-finished-p t))
-      (unless transaction-finished-p
-        (postmodern:execute "ROLLBACK")))))
+  (with-serializable-isolation
+      (postmodern:query (:select (:destore.write-devent
+                                  '$1 '$2 '$3 '$4 '$5 '$6 '$7))
+                        (dstream-uuid dstream)
+                        (as-db-null dstream-type-key)
+                        expected-version
+                        (genuuid)
+                        devent-type
+                        metadata
+                        payload
+                        :single)))
 
 (postmodernity:defpgstruct devent
   uuid
@@ -180,14 +186,13 @@
   payload
   stored-when)
 
-(postmodern:defprepared-with-names write-dsnapshot (dstream
-                                                    version
-                                                    payload)
-  ((:select (:destore.write-dsnapshot '$1 '$2 '$3))
-   (dstream-uuid dstream)
-   version
-   payload)
-  :none)
+(defun write-dsnapshot (dstream version payload)
+  (with-serializable-isolation
+      (postmodern:query (:select (:destore.write-dsnapshot '$1 '$2 '$3))
+                        (dstream-uuid dstream)
+                        version
+                        payload
+                        :none)))
 
 (postmodern:defprepared-with-names read-last-dsnapshot (dstream)
   ((:select 'dstream-uuid
