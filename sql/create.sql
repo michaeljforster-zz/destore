@@ -95,8 +95,8 @@ $$ LANGUAGE plpgsql;
 CREATE TABLE destore.devent
 ( devent_uuid uuid PRIMARY KEY
 , devent_type varchar(255) NOT NULL CHECK (trim(devent_type) <> '')
-, metadata json NOT NULL -- jsonb not available in 9.3
-, payload json NOT NULL -- jsonb not available in 9.3
+, metadata text NOT NULL
+, payload text NOT NULL
 , dstream_uuid uuid NOT NULL REFERENCES destore.dstream ON UPDATE RESTRICT
 , version integer NOT NULL
 , stored_when timestamp with time zone NOT NULL
@@ -120,8 +120,8 @@ CREATE OR REPLACE FUNCTION destore.write_devent
 , expected_version integer
 , the_devent_uuid uuid
 , the_devent_type varchar
-, the_metadata json -- jsonb not available in 9.3
-, the_payload json -- jsonb not available in 9.3
+, the_metadata text
+, the_payload text
 )
 RETURNS integer AS $$
 DECLARE
@@ -220,7 +220,7 @@ CREATE TABLE destore.dsnapshot
 ( dstream_uuid uuid NOT NULL
   REFERENCES destore.dstream ON UPDATE RESTRICT
 , version integer NOT NULL
-, payload json NOT NULL -- jsonb not available in 9.3
+, payload text NOT NULL
 -- This is meta-data for debugging and other maintenance purposes.
 , stored_when timestamp with time zone NOT NULL
 , PRIMARY KEY (dstream_uuid, version)
@@ -229,7 +229,7 @@ CREATE TABLE destore.dsnapshot
 CREATE OR REPLACE FUNCTION destore.write_dsnapshot
 ( the_dstream_uuid uuid
 , the_version integer
-, the_payload json) -- jsbonb not available in 9.3
+, the_payload text) -- jsbonb not available in 9.3
 RETURNS void AS $$
 DECLARE
   exists_dstream boolean;
