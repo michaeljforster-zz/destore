@@ -30,6 +30,15 @@
 
 (in-package "DESTORE/CORE/HIGH-LEVEL")
 
+(defun reduce-dstream (function initial-value dstream start-version last-version)
+  (let ((last-version last-version)) ; a local binding to SETF
+    (let ((history (destore/core/postgres:read-devents dstream start-version)))
+      (flet ((reducer (accumulator next)
+               (setf last-version (destore/core/postgres:devent-version next))
+               (funcall function accumulator next)))
+        (let ((result (reduce #'reducer history :initial-value initial-value)))
+          (values result last-version))))))
+
 (defun default-last-version (dsnapshot)
   (if (null dsnapshot)
       0
@@ -44,21 +53,9 @@
   (let ((last-dsnapshot (destore/core/postgres:read-last-dsnapshot dstream)))
     (let ((last-version (default-last-version last-dsnapshot))
           (initial-value (default-initial-value last-dsnapshot initial-value)))
-      (let ((history (destore/core/postgres:read-devents dstream (1+ last-version))))
-        (flet ((reducer (accumulator next)
-                 (setf last-version (destore/core/postgres:devent-version next))
-                 (funcall function accumulator next)))
-          (let ((result (reduce #'reducer history :initial-value initial-value)))
-            (values result last-version)))))))
+      (let ((start-version (1+ last-version)))
+        (reduce-dstream function initial-value dstream start-version last-version)))))
 
 (defun project (function initial-value dstream &key (start-version 1))
-  (let ((history (destore/core/postgres:read-devents dstream start-version))
-        (last-version (1- start-version))) ; Consistent with RECONSTITUTE
-    (flet ((reducer (accumulator next)
-             (setf last-version (destore/core/postgres:devent-version next))
-             (funcall function accumulator next)))
-      (let ((result (reduce #'reducer history :initial-value initial-value)))
-        (values result
-                (if (null result)
-                    0
-                    last-version))))))
+  (let ((last-version (1- start-version))) ; Consistent with RECONSTITUTE
+    (reduce-dstream function initial-value dstream start-version last-version)))
