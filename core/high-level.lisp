@@ -49,13 +49,13 @@
       initial-value
       (destore/core/postgres:dsnapshot-payload dsnapshot)))
 
-(defun reconstitute (function initial-value dstream)
+(defun reconstitute (dstream function initial-value)
   (let ((last-dsnapshot (destore/core/postgres:read-last-dsnapshot dstream)))
     (let ((last-version (default-last-version last-dsnapshot))
           (initial-value (default-initial-value last-dsnapshot initial-value)))
       (let ((start-version (1+ last-version)))
         (reduce-dstream function initial-value dstream start-version last-version)))))
 
-(defun project (function initial-value dstream &key (start-version 1))
+(defun project (dstream function initial-value &key (start-version 1))
   (let ((last-version (1- start-version))) ; Consistent with RECONSTITUTE
     (reduce-dstream function initial-value dstream start-version last-version)))
