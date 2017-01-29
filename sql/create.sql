@@ -123,9 +123,10 @@ CREATE OR REPLACE FUNCTION destore.write_devent
 , the_metadata text
 , the_payload text
 )
-RETURNS integer AS $$
+RETURNS destore.devent AS $$
 DECLARE
   latest_version integer;
+  the_devent destore.devent;
 BEGIN
   latest_version = version FROM destore.dstream
                    WHERE dstream_uuid = the_dstream_uuid;
@@ -165,7 +166,8 @@ BEGIN
   , version = latest_version
   WHERE dstream_uuid = the_dstream_uuid;
 
-  RETURN latest_version;
+  SELECT * INTO the_devent FROM destore.devent WHERE devent_uuid = the_devent_uuid;
+  RETURN the_devent;
 END;
 $$ LANGUAGE plpgsql;
 

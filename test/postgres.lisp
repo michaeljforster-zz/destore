@@ -108,13 +108,22 @@
         (assert-true (<= version (devent-version devent)))
         (setf version (devent-version devent))))))
 
+(define-test write-devent-increments-dstream-version
+  (purge-destore)
+  (create-dstreams)
+  (assert-equal 0 (dstream-version *dstream-a*))
+  (with-connection (write-devent *dstream-a* nil 0 "com.example.devent-type" "{}" "{}"))
+  (assert-equal 1 (dstream-version *dstream-a*))
+  (with-connection (write-devent *dstream-a* nil 1 "com.example.devent-type" "{}" "{}"))
+  (assert-equal 2 (dstream-version *dstream-a*)))
+
 (define-test write-devent-checks-dstream-type-key-rolls-back
   (purge-destore)
   (create-dstreams)
   (let ((dstream-type-key "FOO"))
     (with-connection (write-devent *dstream-a* dstream-type-key 0 "com.example.devent-type" "{}" "{}"))
     (assert-error 'cl-postgres-error:unique-violation (with-connection (write-devent *dstream-b* dstream-type-key 0 "com.example.devent-type" "{}" "{}")))
-    (assert-equal 1 (with-connection (write-devent *dstream-c* dstream-type-key 0 "com.example.devent-type" "{}" "{}"))))
+    (assert-equal 1 (with-connection (devent-version (write-devent *dstream-c* dstream-type-key 0 "com.example.devent-type" "{}" "{}")))))
   (let ((last-devent (first (last (with-connection (read-devents *dstream-a* 0))))))
     (assert-equal 1 (devent-version last-devent)))
   (purge-destore)
@@ -123,7 +132,7 @@
     (with-connection (write-devent *dstream-a* nil 0 "com.example.devent-type" "{}" "{}"))
     (with-connection (write-devent *dstream-b* dstream-type-key 0 "com.example.devent-type" "{}" "{}"))
     (assert-error 'cl-postgres-error:unique-violation (with-connection (write-devent *dstream-a* dstream-type-key 1 "com.example.devent-type" "{}" "{}")))
-    (assert-equal 1 (with-connection (write-devent *dstream-c* dstream-type-key 0 "com.example.devent-type" "{}" "{}"))))
+    (assert-equal 1 (with-connection (devent-version (write-devent *dstream-c* dstream-type-key 0 "com.example.devent-type" "{}" "{}")))))
   (let ((last-devent (first (last (with-connection (read-devents *dstream-a* 0))))))
     (assert-equal 1 (devent-version last-devent))))
 

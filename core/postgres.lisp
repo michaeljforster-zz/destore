@@ -91,57 +91,12 @@
            (unless transaction-finished-p
              (postmodern:execute "ROLLBACK")))))))
 
-(postmodernity:defpgstruct dstream
+;; A PGSTRUCT would make the version read only.
+(defstruct dstream
   uuid
   type
   type-key
   version)
-
-(defun create-dstream (dstream-type)
-  (with-serializable-isolation
-      (postmodern:query (:select 'dstream-uuid
-                                 'dstream-type
-                                 'dstream-type-key
-                                 'version
-                                 :from (:destore.create-dstream '$1 '$2))
-                        (genuuid)
-                        dstream-type
-                        :dstream)))
-
-(postmodern:defprepared list-all-dstreams
-    (:select 'dstream-uuid
-             'dstream-type
-             'dstream-type-key
-             'version
-             :from (:destore.list-all-dstreams))
-  :dstreams)
-
-(postmodern:defprepared-with-names find-dstream (dstream-uuid)
-  ((:select 'dstream-uuid
-            'dstream-type
-            'dstream-type-key
-            'version
-            :from (:destore.find-dstream '$1))
-   dstream-uuid)
-  :dstream)
-
-(defun write-devent (dstream
-                     dstream-type-key
-                     expected-version
-                     devent-type
-                     metadata
-                     payload)
-  (with-serializable-isolation
-      (postmodern:query (:select (:destore.write-devent
-                                  '$1 '$2 '$3 '$4 '$5 '$6 '$7))
-                        (dstream-uuid dstream)
-                        (as-db-null dstream-type-key)
-                        expected-version
-                        (genuuid)
-                        devent-type
-                        metadata
-                        payload
-                        :single)))
 
 (postmodernity:defpgstruct devent
   uuid
@@ -152,6 +107,91 @@
   version
   stored-when
   sequence-no)
+
+(defun row-to-dstream (row)
+  (make-dstream :uuid (first row)
+                :type (second row)
+                :type-key (third row)
+                :version (fourth row)))
+
+(postmodern:defprepared-with-names %create-dstream (dstream-type)
+  ((:select 'dstream-uuid
+           'dstream-type
+           'dstream-type-key
+           'version
+           :from (:destore.create-dstream '$1 '$2))
+   (genuuid)
+   dstream-type)
+  :row)
+
+(defun create-dstream (dstream-type)
+  (let ((result (with-serializable-isolation
+                  (%create-dstream dstream-type))))
+    (row-to-dstream result)))
+
+(postmodern:defprepared %list-all-dstreams
+    (:select 'dstream-uuid
+             'dstream-type
+             'dstream-type-key
+             'version
+             :from (:destore.list-all-dstreams))
+  :rows)
+
+(defun list-all-dstreams ()
+  (mapcar #'row-to-dstream (%list-all-dstreams)))
+
+(postmodern:defprepared-with-names %find-dstream (dstream-uuid)
+  ((:select 'dstream-uuid
+            'dstream-type
+            'dstream-type-key
+            'version
+            :from (:destore.find-dstream '$1))
+   dstream-uuid)
+  :row)
+
+(defun find-dstream (dstream-uuid)
+  (row-to-dstream (%find-dstream dstream-uuid)))
+
+(postmodern:defprepared-with-names %write-devent (dstream
+                                                  dstream-type-key
+                                                  expected-version
+                                                  devent-type
+                                                  metadata
+                                                  payload)
+  ((:select 'devent-uuid
+            'devent-type
+            'metadata
+            'payload
+            'dstream-uuid
+            'version
+            'stored-when
+            'sequence-no
+            :from (:destore.write-devent '$1 '$2 '$3 '$4 '$5 '$6 '$7))
+   (dstream-uuid dstream)
+   (as-db-null dstream-type-key)
+   expected-version
+   (genuuid)
+   devent-type
+   metadata
+   payload)
+  :devent)
+
+(defun write-devent (dstream
+                     dstream-type-key
+                     expected-version
+                     devent-type
+                     metadata
+                     payload)
+  (with-serializable-isolation
+    (let ((devent (%write-devent dstream
+                                 dstream-type-key
+                                 expected-version
+                                 devent-type
+                                 metadata
+                                 payload)))
+      (setf (dstream-version dstream)
+            (devent-version devent))
+      devent)))
 
 (postmodern:defprepared list-all-devents
     (:select 'devent-uuid
@@ -165,8 +205,7 @@
              :from (:destore.list-all-devents))
   :devents)
 
-(postmodern:defprepared-with-names read-devents (dstream
-                                                 start-version)
+(postmodern:defprepared-with-names read-devents (dstream start-version)
   ((:select 'devent-uuid
             'devent-type
             'metadata
@@ -186,13 +225,16 @@
   payload
   stored-when)
 
+(postmodern:defprepared-with-names %write-dsnapshot (dstream version payload)
+  ((:select (:destore.write-dsnapshot '$1 '$2 '$3))
+   (dstream-uuid dstream)
+   version
+   payload)
+  :none)
+
 (defun write-dsnapshot (dstream version payload)
   (with-serializable-isolation
-      (postmodern:query (:select (:destore.write-dsnapshot '$1 '$2 '$3))
-                        (dstream-uuid dstream)
-                        version
-                        payload
-                        :none)))
+    (%write-dsnapshot dstream version payload)))
 
 (postmodern:defprepared-with-names read-last-dsnapshot (dstream)
   ((:select 'dstream-uuid
