@@ -154,7 +154,6 @@
 
 (postmodern:defprepared-with-names %write-devent (dstream
                                                   dstream-type-key
-                                                  expected-version
                                                   devent-type
                                                   metadata
                                                   payload)
@@ -169,7 +168,7 @@
             :from (:destore.write-devent '$1 '$2 '$3 '$4 '$5 '$6 '$7))
    (dstream-uuid dstream)
    (as-db-null dstream-type-key)
-   expected-version
+   (dstream-version dstream)
    (genuuid)
    devent-type
    metadata
@@ -178,14 +177,12 @@
 
 (defun write-devent (dstream
                      dstream-type-key
-                     expected-version
                      devent-type
                      metadata
                      payload)
   (with-serializable-isolation
     (let ((devent (%write-devent dstream
                                  dstream-type-key
-                                 expected-version
                                  devent-type
                                  metadata
                                  payload)))
