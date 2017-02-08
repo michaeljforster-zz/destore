@@ -32,9 +32,6 @@
 
 (in-package "DESTORE/TEST/SUPPORT")
 
-(defun fresh-uuid ()
-  (uuid:make-v4-uuid))
-
 (defparameter *connection-spec*
   '("destore_test" "postgres" "" "localhost"))
 
@@ -48,5 +45,5 @@
     (postmodern:query "BEGIN")
     (postmodern:query "DELETE FROM destore.dsnapshot")
     (postmodern:query "DELETE FROM destore.devent")
-    (postmodern:query "DELETE FROM destore.dstream")
+    (postmodern:query "DELETE FROM destore.dref")
     (postmodern:query "COMMIT")))

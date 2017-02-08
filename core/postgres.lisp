@@ -28,35 +28,31 @@
   (:import-from "LOCAL-TIME")
   (:import-from "POSTMODERN")
   (:import-from "POSTMODERNITY")
-  (:export "CREATE-DSTREAM"
-           "DSTREAM"
-           "DSTREAM-UUID"
-           "DSTREAM-VERSION"
-           "DSTREAM-TYPE"
-           "DSTREAM-TYPE-KEY"
-           "LIST-ALL-DSTREAMS"
-           "FIND-DSTREAM"
-           "WRITE-DEVENT"
-           "DEVENT"
-           "DEVENT-UUID"
-           "DEVENT-TYPE"
-           "DEVENT-METADATA"
-           "DEVENT-PAYLOAD"
-           "DEVENT-DSTREAM-UUID"
-           "DEVENT-VERSION"
-           "DEVENT-STORED-WHEN"
-           "DEVENT-SEQUENCE-NO"
-           "LIST-ALL-DEVENTS"
-           "READ-DEVENTS"
-           "DSNAPSHOT"
-           "DSNAPSHOT-DSTREAM-UUID"
-           "DSNAPSHOT-VERSION"
-           "DSNAPSHOT-PAYLOAD"
-           "DSNAPSHOT-STORED-WHEN"
-           "WRITE-DSNAPSHOT"
-           "READ-LAST-DSNAPSHOT"))
+  (:export "GENUUID"
+           "WITH-SERIALIZABLE-ISOLATION"
+           "INSERT-DREF"
+           "INSERT-DEVENT-RETURNING"
+           ;; TODO "WRITE-DSNAPSHOT"
+           "COUNT-DREFS"
+           "COUNT-DREFS-OF-TYPE"
+           "SELECT-DREFS"
+           "SELECT-DREFS-OF-TYPE"
+           "SELECT-DREF"
+           "COUNT-DEVENTS"
+           "COUNT-DEVENTS-FOR-DREF-STARTING"
+           "SELECT-DEVENTS"
+           "SELECT-DEVENTS-FOR-DREF-STARTING"
+           "COUNT-DSNAPSHOTS"
+           "COUNT-DSNAPSHOTS-FOR-DREF"
+           "SELECT-DSNAPSHOTS"
+           "SELECT-DSNAPSHOTS-FOR-DREF"
+           "SELECT-LAST-DSNAPSHOT-FOR-DREF"))
 
 (in-package "DESTORE/CORE/POSTGRES")
+
+;;; This module provides a thin wrapper around the PostgreSQL
+;;; database, exposing the DML and SQL that is expected to be used and
+;;; for testing the behaviour at the Common Lisp level.
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (local-time:set-local-time-cl-postgres-readers))
@@ -91,153 +87,187 @@
            (unless transaction-finished-p
              (postmodern:execute "ROLLBACK")))))))
 
-;; A PGSTRUCT would make the version read only.
-(defstruct dstream
-  uuid
-  type
-  type-key
-  version)
+(postmodern:defprepared-with-names insert-dref (dref-uuid dref-type)
+  ((:insert-into 'destore.dref :set
+                 'dref-uuid '$1
+                 'dref-type '$2
+                 'version '$3
+                 'secondary-key-value '$4)
+   dref-uuid
+   dref-type
+   0
+   (as-db-null nil))
+  :none)
 
-(postmodernity:defpgstruct devent
-  uuid
-  type
-  metadata
-  payload
-  dstream-uuid
-  version
-  stored-when
-  sequence-no)
-
-(defun row-to-dstream (row)
-  (make-dstream :uuid (first row)
-                :type (second row)
-                :type-key (third row)
-                :version (fourth row)))
-
-(postmodern:defprepared-with-names %create-dstream (dstream-type)
-  ((:select 'dstream-uuid
-           'dstream-type
-           'dstream-type-key
-           'version
-           :from (:destore.create-dstream '$1 '$2))
-   (genuuid)
-   dstream-type)
-  :row)
-
-(defun create-dstream (dstream-type)
-  (let ((result (with-serializable-isolation
-                  (%create-dstream dstream-type))))
-    (row-to-dstream result)))
-
-(postmodern:defprepared %list-all-dstreams
-    (:select 'dstream-uuid
-             'dstream-type
-             'dstream-type-key
-             'version
-             :from (:destore.list-all-dstreams))
-  :rows)
-
-(defun list-all-dstreams ()
-  (mapcar #'row-to-dstream (%list-all-dstreams)))
-
-(postmodern:defprepared-with-names %find-dstream (dstream-uuid)
-  ((:select 'dstream-uuid
-            'dstream-type
-            'dstream-type-key
-            'version
-            :from (:destore.find-dstream '$1))
-   dstream-uuid)
-  :row)
-
-(defun find-dstream (dstream-uuid)
-  (row-to-dstream (%find-dstream dstream-uuid)))
-
-(postmodern:defprepared-with-names %write-devent (dstream
-                                                  dstream-type-key
-                                                  devent-type
-                                                  metadata
-                                                  payload)
-  ((:select 'devent-uuid
-            'devent-type
-            'metadata
-            'payload
-            'dstream-uuid
-            'version
-            'stored-when
-            'sequence-no
-            :from (:destore.write-devent '$1 '$2 '$3 '$4 '$5 '$6 '$7))
-   (dstream-uuid dstream)
-   (as-db-null dstream-type-key)
-   (dstream-version dstream)
-   (genuuid)
+(postmodern:defprepared-with-names %insert-devent-returning (dref-uuid
+                                                             expected-version
+                                                             secondary-key-value
+                                                             devent-uuid
+                                                             devent-type
+                                                             metadata
+                                                             payload)
+  ((:select (:destore.insert-devent-returning '$1 '$2 '$3 '$4 '$5 '$6 '$7))
+   dref-uuid
+   expected-version
+   (as-db-null secondary-key-value)
+   devent-uuid
    devent-type
    metadata
    payload)
-  :devent)
+  :single)
 
-(defun write-devent (dstream
-                     dstream-type-key
-                     devent-type
-                     metadata
-                     payload)
+(defun insert-devent-returning (dref-uuid
+                                expected-version
+                                secondary-key-value
+                                devent-uuid
+                                devent-type
+                                metadata
+                                payload)
   (with-serializable-isolation
-    (let ((devent (%write-devent dstream
-                                 dstream-type-key
-                                 devent-type
-                                 metadata
-                                 payload)))
-      (setf (dstream-version dstream)
-            (devent-version devent))
-      devent)))
+    (%insert-devent-returning dref-uuid
+                              expected-version
+                              secondary-key-value
+                              devent-uuid
+                              devent-type
+                              metadata
+                              payload)))
 
-(postmodern:defprepared list-all-devents
+;;; Regarding the -OF-TYPE variants of the functions below,
+;;; POSTMODERN:DEFPREPARED-WITH-NAMES does support a full lambda list,
+;;; with keyword parameters. However, it's simpler to write a wrapper
+;;; with a keyword parameter and that calls one of these two
+;;; accordingly.
+
+(postmodern:defprepared count-drefs
+    (:select (:count '*) :from 'destore.dref)
+  :single)
+
+(postmodern:defprepared-with-names count-drefs-of-type (dref-type)
+  ((:select (:count '*) :from 'destore.dref :where (:= 'dref-type '$1))
+   dref-type)
+  :single)
+
+(postmodern:defprepared select-drefs
+    (:select 'dref-uuid
+             'dref-type
+             'version
+             'secondary-key-value
+             :from 'destore.dref)
+  :rows)
+
+(postmodern:defprepared-with-names select-drefs-of-type (dref-type)
+  ((:select 'dref-uuid
+            'dref-type
+            'version
+            'secondary-key-value
+            :from 'destore.dref
+            :where (:= 'dref-type '$1))
+   dref-type)
+  :rows)
+
+(postmodern:defprepared-with-names select-dref (dref-uuid)
+  ((:select 'dref-uuid
+            'dref-type
+            'version
+            'secondary-key-value
+            :from 'destore.dref
+            :where (:= 'dref-uuid '$1))
+   dref-uuid)
+  :row)
+
+(postmodern:defprepared count-devents
+    (:select (:count '*) :from 'destore.devent)
+  :single)
+
+(postmodern:defprepared-with-names count-devents-for-dref-starting (dref-uuid version)
+  ((:select (:count '*)
+            :from 'destore.devent
+            :where (:= 'dref-uuid '$1))
+   dref-uuid
+   version)
+  :single)
+
+(postmodern:defprepared select-devents
+    (:order-by
+     (:select 'devent-uuid
+              'devent-type
+              'metadata
+              'payload
+              'dref-uuid
+              'version
+              'stored-when
+              'sequence-no
+              :from 'destore.devent)
+     'sequence-no)
+  :rows)
+
+(postmodern:defprepared-with-names select-devents-for-dref-starting (dref-uuid version)
+  ((:order-by
     (:select 'devent-uuid
              'devent-type
              'metadata
              'payload
-             'dstream-uuid
+             'dref-uuid
              'version
              'stored-when
              'sequence-no
-             :from (:destore.list-all-devents))
-  :devents)
+             :from 'destore.devent
+             :where (:and (:= 'dref-uuid '$1)
+                          (:>= 'version '$2)))
+    'sequence-no)
+   dref-uuid
+   version)
+  :rows)
 
-(postmodern:defprepared-with-names read-devents (dstream start-version)
-  ((:select 'devent-uuid
-            'devent-type
-            'metadata
-            'payload
-            'dstream-uuid
-            'version
-            'stored-when
-            'sequence-no
-            :from (:destore.read-devents '$1 '$2))
-   (dstream-uuid dstream)
-   start-version)
-  :devents)
+;; TODO select-last-dsnapshot
 
-(postmodernity:defpgstruct dsnapshot
-  dstream-uuid
-  version
-  payload
-  stored-when)
+;; (postmodern:defprepared-with-names %write-dsnapshot (dstream version payload)
+;;   ((:select (:destore.write-dsnapshot '$1 '$2 '$3))
+;;    (dstream-uuid dstream)
+;;    version
+;;    payload)
+;;   :none)
 
-(postmodern:defprepared-with-names %write-dsnapshot (dstream version payload)
-  ((:select (:destore.write-dsnapshot '$1 '$2 '$3))
-   (dstream-uuid dstream)
-   version
-   payload)
-  :none)
+;; (defun write-dsnapshot (dstream version payload)
+;;   (with-serializable-isolation
+;;     (%write-dsnapshot dstream version payload)))
 
-(defun write-dsnapshot (dstream version payload)
-  (with-serializable-isolation
-    (%write-dsnapshot dstream version payload)))
+;; (postmodern:defprepared-with-names read-last-dsnapshot (dstream)
+;;   ((:select 'dstream-uuid
+;;             'version
+;;             'payload
+;;             'stored-when
+;;             :from (:destore.read-last-dsnapshot '$1))
+;;    (dstream-uuid dstream))
+;;   :dsnapshot)
 
-(postmodern:defprepared-with-names read-last-dsnapshot (dstream)
-  ((:select 'dstream-uuid
-            'version
-            'payload
-            'stored-when
-            :from (:destore.read-last-dsnapshot '$1))
-   (dstream-uuid dstream))
-  :dsnapshot)
+(postmodern:defprepared count-dsnapshots
+    (:select (:count '*) :from 'destore.dsnapshot)
+  :single)
+
+(postmodern:defprepared-with-names count-dsnapshots-for-dref (dref-uuid)
+  ((:select (:count '*) :from 'destore.dsnapshot :where (:= 'dref-uuid '$1))
+   dref-uuid)
+  :single)
+
+(postmodern:defprepared select-dsnapshots
+    (:select 'dref-uuid 'version 'payload 'stored-when :from 'destore.dsnapshot)
+  :rows)
+
+(postmodern:defprepared-with-names select-dsnapshots-for-dref (dref-uuid)
+  ((:select 'dref-uuid 'version 'payload 'stored-when
+            :from 'destore.dsnapshot
+            :where (:= 'dref-uuid '$1))
+   dref-uuid)
+  :rows)
+
+(postmodern:defprepared-with-names select-last-dsnapshot-for-dref (dref-uuid)
+  ((:limit
+    (:order-by
+     (:select 'dref-uuid 'version 'payload 'stored-when
+              :from 'destore.dsnapshot
+              :where (:= 'dref-uuid '$1))
+     (:desc 'version))
+    1)
+   dref-uuid)
+  :row)

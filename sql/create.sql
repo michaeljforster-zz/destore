@@ -28,112 +28,67 @@
 
 CREATE SCHEMA destore;
 
--- Every aggregate in the domain should be represented by a dstream of
--- devents.  The dstream and its type are recorded here. The dstream
--- version must match that of the latest devent for the dstream (see
--- destore.devent.version); the version serves as an optimistic
--- concurrency check (see destore.write_devent()).  Together,
--- dstream_type and dstream_type_key support an optional secondary key
--- for the aggregate (see destore.write_devent()).
+-- Every aggregate in the domain should be represented by a dref and
+-- associated devents.  The dref and its type are recorded here. The
+-- dref version must match that of the latest devent associated with
+-- the dref (see destore.devent.version); the version serves as an
+-- optimistic concurrency check (see destore.write_devent()).
+-- Together, dref_type and secondary_key_value support an optional
+-- secondary key for the aggregate (see destore.write_devent()).
 
-CREATE TABLE destore.dstream
-( dstream_uuid uuid PRIMARY KEY
-, dstream_type varchar(255) NOT NULL CHECK (trim(dstream_type) <> '')
-, dstream_type_key varchar(255) -- can be null
+CREATE TABLE destore.dref
+( dref_uuid uuid PRIMARY KEY
+, dref_type varchar(255) NOT NULL CHECK (trim(dref_type) <> '')
 , version integer NOT NULL
-, UNIQUE(dstream_type, dstream_type_key)
+, secondary_key_value varchar(255) -- can be null
+, UNIQUE(dref_type, secondary_key_value)
 );
 
-CREATE OR REPLACE FUNCTION destore.create_dstream
-( the_dstream_uuid uuid
-, the_dstream_type varchar
-)
-RETURNS destore.dstream AS $$
-DECLARE
-  row destore.dstream;
-BEGIN
-  INSERT INTO destore.dstream
-  (dstream_uuid, dstream_type, dstream_type_key, version)
-  VALUES
-  (the_dstream_uuid, the_dstream_type, null, 0)
-  RETURNING * INTO row;
-  RETURN row;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION destore.list_all_dstreams ()
-RETURNS SETOF destore.dstream AS $$
-  SELECT
-    dstream_uuid
-  , dstream_type
-  , dstream_type_key
-  , version
-  FROM destore.dstream;
-$$ LANGUAGE sql;
-
-CREATE OR REPLACE FUNCTION destore.find_dstream (the_dstream_uuid uuid)
-RETURNS destore.dstream AS $$
-DECLARE
-  row destore.dstream;
-BEGIN
-  SELECT
-    dstream_uuid
-  , dstream_type
-  , dstream_type_key
-  , version
-  INTO row
-  FROM destore.dstream
-  WHERE dstream_uuid = the_dstream_uuid;
-  RETURN row;
-END;
-$$ LANGUAGE plpgsql;
-
 -- Each devent stored has an incremented version number, which is
--- unique and sequential only within the context of the given dstream
--- (see destore.dstream.version).
+-- unique and sequential only within the context of the given dref
+-- (see destore.dref.version).
 
 CREATE TABLE destore.devent
 ( devent_uuid uuid PRIMARY KEY
 , devent_type varchar(255) NOT NULL CHECK (trim(devent_type) <> '')
 , metadata text NOT NULL
 , payload text NOT NULL
-, dstream_uuid uuid NOT NULL REFERENCES destore.dstream ON UPDATE RESTRICT
+, dref_uuid uuid NOT NULL REFERENCES destore.dref ON UPDATE RESTRICT
 , version integer NOT NULL
 , stored_when timestamp with time zone NOT NULL
 , sequence_no bigserial NOT NULL
-, UNIQUE (dstream_uuid, version)
+, UNIQUE (dref_uuid, version)
 );
 
--- The operation for writing an devent to a dstream. In adition to the
--- dstream's UUID and type, the caller must specify what is expected
--- to be the current version of the dstream--and of the latest stored
--- devent for the dstream. This constitutes an optimistic concurrency
+-- The operation for writing an devent to a dref. In adition to the
+-- dref's UUID and type, the caller must specify what is expected
+-- to be the current version of the dref--and of the latest stored
+-- devent for the dref. This constitutes an optimistic concurrency
 -- check, and the versions of the writeed devent will increment from
 -- the version.
 -- 
 -- Note that this operation must be performed within a serializable
 -- transaction.
 
-CREATE OR REPLACE FUNCTION destore.write_devent
-( the_dstream_uuid uuid
-, the_dstream_type_key varchar
+CREATE OR REPLACE FUNCTION destore.insert_devent_returning
+( the_dref_uuid uuid
 , expected_version integer
+, the_secondary_key_value varchar
 , the_devent_uuid uuid
 , the_devent_type varchar
 , the_metadata text
 , the_payload text
 )
-RETURNS destore.devent AS $$
+RETURNS integer AS $$
 DECLARE
   latest_version integer;
-  the_devent destore.devent;
 BEGIN
-  latest_version = version FROM destore.dstream
-                   WHERE dstream_uuid = the_dstream_uuid;
+  latest_version = version FROM destore.dref
+                   WHERE dref_uuid = the_dref_uuid;
 
-  -- Be more explicity than relying upon NOT NULL check.
+  -- Be more explicit than relying upon the NOT NULL check.
   IF latest_version IS NULL THEN
-    RAISE EXCEPTION 'Nonexistent dstream: UUID = %', the_dstream_uuid;
+    RAISE EXCEPTION 'Nonexistent dref: UUID = %', the_dref_uuid;
   END IF;
 
   IF expected_version != latest_version THEN
@@ -149,7 +104,7 @@ BEGIN
   , devent_type
   , metadata
   , payload
-  , dstream_uuid
+  , dref_uuid
   , version
   , stored_when)
   VALUES
@@ -157,54 +112,18 @@ BEGIN
   , the_devent_type
   , the_metadata
   , the_payload
-  , the_dstream_uuid
+  , the_dref_uuid
   , latest_version
   , current_timestamp);
 
-  UPDATE destore.dstream SET
-    dstream_type_key = the_dstream_type_key
+  UPDATE destore.dref SET
+    secondary_key_value = the_secondary_key_value
   , version = latest_version
-  WHERE dstream_uuid = the_dstream_uuid;
+  WHERE dref_uuid = the_dref_uuid;
 
-  SELECT * INTO the_devent FROM destore.devent WHERE devent_uuid = the_devent_uuid;
-  RETURN the_devent;
+  RETURN latest_version;
 END;
 $$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION destore.list_all_devents ()
-RETURNS SETOF destore.devent AS $$
-  SELECT
-    devent_uuid
-  , devent_type
-  , metadata
-  , payload
-  , dstream_uuid
-  , version
-  , stored_when
-  , sequence_no
-  FROM destore.devent
-  ORDER BY sequence_no;
-$$ LANGUAGE sql;
-
--- The operation to read devents in a dstream from the specified version
--- forward.
-
-CREATE OR REPLACE FUNCTION destore.read_devents
-(the_dstream_uuid uuid, start_version integer)
-RETURNS SETOF destore.devent AS $$
-  SELECT
-    devent_uuid
-  , devent_type
-  , metadata
-  , payload
-  , dstream_uuid
-  , version
-  , stored_when
-  , sequence_no
-  FROM destore.devent
-  WHERE dstream_uuid = the_dstream_uuid AND version >= start_version
-  ORDER BY version;
-$$ LANGUAGE sql;
 
 -- An aggregate can be reconstituted by replaying its devent history,
 -- but that will become more expensive as the number of devents
@@ -214,48 +133,48 @@ $$ LANGUAGE sql;
 -- devents, using the dsnapshot as a starting point.
 -- 
 -- The dsnapshot version must match that of the latest devent used to
--- create the dstream's dsnapshot (see
--- destore.dstream.version). Betware that this is not enforced by the
+-- create the dref's dsnapshot (see
+-- destore.dref.version). Betware that this is not enforced by the
 -- database design.
 
 CREATE TABLE destore.dsnapshot
-( dstream_uuid uuid NOT NULL
-  REFERENCES destore.dstream ON UPDATE RESTRICT
+( dref_uuid uuid NOT NULL
+  REFERENCES destore.dref ON UPDATE RESTRICT
 , version integer NOT NULL
 , payload text NOT NULL
 -- This is meta-data for debugging and other maintenance purposes.
 , stored_when timestamp with time zone NOT NULL
-, PRIMARY KEY (dstream_uuid, version)
+, PRIMARY KEY (dref_uuid, version)
 );
 
-CREATE OR REPLACE FUNCTION destore.write_dsnapshot
-( the_dstream_uuid uuid
-, the_version integer
-, the_payload text) -- jsbonb not available in 9.3
-RETURNS void AS $$
-DECLARE
-  exists_dstream boolean;
-BEGIN
-  exists_dstream = EXISTS (SELECT true FROM destore.dstream
-                   WHERE dstream_uuid = the_dstream_uuid);
+-- TODO CREATE OR REPLACE FUNCTION destore.write_dsnapshot
+-- ( the_dref_uuid uuid
+-- , the_version integer
+-- , the_payload text) -- jsbonb not available in 9.3
+-- RETURNS void AS $$
+-- DECLARE
+--   exists_dref boolean;
+-- BEGIN
+--   exists_dref = EXISTS (SELECT true FROM destore.dref
+--                    WHERE dref_uuid = the_dref_uuid);
+-- 
+--   -- Be more explicity than relying upon NOT NULL check.
+--   IF NOT exists_dref THEN
+--     RAISE EXCEPTION 'Nonexistent dref: UUID = %', the_dref_uuid;
+--   END IF;
+-- 
+--   INSERT INTO destore.dsnapshot
+--   (dref_uuid, version, payload, stored_when)
+--   VALUES
+--   (the_dref_uuid, the_version, the_payload, current_timestamp);
+-- END;
+-- $$ LANGUAGE plpgsql;
 
-  -- Be more explicity than relying upon NOT NULL check.
-  IF NOT exists_dstream THEN
-    RAISE EXCEPTION 'Nonexistent dstream: UUID = %', the_dstream_uuid;
-  END IF;
-
-  INSERT INTO destore.dsnapshot
-  (dstream_uuid, version, payload, stored_when)
-  VALUES
-  (the_dstream_uuid, the_version, the_payload, current_timestamp);
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION destore.read_last_dsnapshot
-(the_dstream_uuid uuid)
-RETURNS SETOF destore.dsnapshot AS $$
-  SELECT dstream_uuid, version, payload, stored_when
-  FROM destore.dsnapshot
-  ORDER BY version DESC
-  LIMIT 1
-$$ LANGUAGE sql;
+-- CREATE OR REPLACE FUNCTION destore.read_last_dsnapshot
+-- (the_dref_uuid uuid)
+-- RETURNS SETOF destore.dsnapshot AS $$
+--   SELECT dref_uuid, version, payload, stored_when
+--   FROM destore.dsnapshot
+--   ORDER BY version DESC
+--   LIMIT 1
+-- $$ LANGUAGE sql;
