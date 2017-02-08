@@ -23,6 +23,7 @@
 ;;; SOFTWARE.
 
 (defpackage "DESTORE/TEST/POSTGRES"
+  (:import-from "UUID")
   (:use "CL"
         "LISP-UNIT"
         "DESTORE/CORE/POSTGRES"
@@ -30,58 +31,81 @@
 
 (in-package "DESTORE/TEST/POSTGRES")
 
+(defparameter *dref-type* "com.example.dref.user")
+
+(defparameter *dref-count* 1000)
+
 (define-test empty-destore
   (purge-destore)
-  (with-connection ()
+  (with-connection
+    ;; drefs
     (assert-equal 0 (destore/core/postgres:count-drefs))
-    (assert-equal 0 (destore/core/postgres:count-drefs-of-type "com.example.dref.user"))
+    (assert-equal 0 (destore/core/postgres:count-drefs-of-type *dref-type*))
     (assert-equal '() (destore/core/postgres:select-drefs))
-    (assert-equal '() (destore/core/postgres:select-drefs-of-type "com.example.dref.user"))
-    ;; (assert-equal nil (destore/core/postgres:select-dref ...))
+    (assert-equal '() (destore/core/postgres:select-drefs-of-type *dref-type*))
+    ;; (destore/core/postgres:select-dref ...)
+    ;; devents
     (assert-equal 0 (destore/core/postgres:count-devents))
-    ;; (assert-equal 0 (destore/core/postgres:count-devents-for-dref-starting ...))
+    ;; (destore/core/postgres:count-devents-for-dref-starting ...)
     (assert-equal '() (destore/core/postgres:select-devents))
-    ;; (assert-equal '() (destore/core/postgres:select-devents-for-dref-starting ...))
+    ;; (destore/core/postgres:select-devents-for-dref-starting ...)
+    ;; dsnapshots
     (assert-equal 0 (destore/core/postgres:count-dsnapshots))
-    ;; (assert-equal 0 (destore/core/postgres:count-dsnapshots-for-dref ...))
+    ;; (destore/core/postgres:count-dsnapshots-for-dref ...)
     (assert-equal '() (destore/core/postgres:select-dsnapshots))
-    ;; (assert-equal '() (destore/core/postgres:select-dsnapshots-for-dref ...))
-    ;; (assert-equal nil (destore/core/postgres:select-last-dsnapshots-for-dref ...))
+    ;; (destore/core/postgres:select-dsnapshots-for-dref ...)
+    ;; (destore/core/postgres:select-last-dsnapshots-for-dref ...)
     ))
 
-;; (define-test insert-drefs
-;;   (purge-destore)
-;;   (with-connection
-;;     (let ((dref-uuid (destore/core/postgres:genuuid))
-;;           (dref-type "com.example.dref.user")
-;;           (count 1000))
-;;       (dotimes (i (1- count))
-;;         (destore/core/postgres:insert-dref (destore/core/postgres:genuuid) dref-type))
-;;       (destore/core/postgres:insert-dref dref-uuid dref-type)
-;;       ;; TODO count-drefs TODO count-drefs-where-type TODO instead of
-;;       ;; checking length, check EVERY row has UUID that is MEMBER of
-;;       ;; the collection of UUIDs we generated above.
-;;       (assert-equal count (length (destore/core/postgres:select-drefs)))
-;;       (assert-equal count (length (destore/core/postgres:select-drefs-where-type dref-type)))
-;;       (let ((row (destore/core/postgres:select-dref-where-uuid dref-uuid)))
-;;         (assert-equality #'uuid:uuid= dref-uuid (first row)))
-;;       ;; TODO count-devents
-;;       ;; TODO count-devents-where-dref-uuid
-;;       ;; TODO select-devents
-;;       (assert-equal '() (destore/core/postgres:select-devents-where-dref-uuid dref-uuid))
-;;       ;; (assert-equal nil (destore/core/postgres:select-last-dsnapshot dref-uuid))
-;;       )))
+(define-test insert-drefs
+  (purge-destore)
+  (with-connection
+    (let ((dref-uuids '()))
+      (dotimes (i *dref-count*)
+        (let ((dref-uuid (destore/core/postgres:genuuid)))
+          (destore/core/postgres:insert-dref dref-uuid *dref-type*)
+          (push dref-uuid dref-uuids)))
+      (flet ((selected-inserted-p (row)
+               (let ((dref-uuid (first row)))
+                 (member dref-uuid dref-uuids :test #'uuid:uuid=)))
+             (make-inserted-selected-p (row-fn)
+               #'(lambda (dref-uuid)
+                   (let ((row (funcall row-fn dref-uuid)))
+                     (and (not (null row))
+                          (uuid:uuid= (first row) dref-uuid)))))
+             (make-zerop (function &rest args)
+               #'(lambda (dref-uuid)
+                   (zerop (apply function dref-uuid args))))
+             (make-emptyp (function &rest args)
+               #'(lambda (dref-uuid)
+                   (null (apply function dref-uuid args)))))
+        ;; drefs
+        (assert-equal *dref-count* (destore/core/postgres:count-drefs))
+        (assert-equal *dref-count* (destore/core/postgres:count-drefs-of-type *dref-type*))
+        (assert-true (every #'selected-inserted-p (destore/core/postgres:select-drefs)))
+        (assert-true (every #'selected-inserted-p (destore/core/postgres:select-drefs-of-type *dref-type*)))
+        (assert-true (every (make-inserted-selected-p #'destore/core/postgres:select-dref) dref-uuids))
+        ;; devents
+        (assert-equal 0 (destore/core/postgres:count-devents))
+        (assert-true (every (make-zerop #'destore/core/postgres:count-devents-for-dref-starting 0)
+                            dref-uuids))
+        (assert-equal '() (destore/core/postgres:select-devents))
+        (assert-true (every (make-emptyp #'destore/core/postgres:select-devents-for-dref-starting 0)
+                            dref-uuids))
+        ;; snapshots
+        (assert-equal 0 (destore/core/postgres:count-dsnapshots))
+        (assert-true (every (make-zerop #'destore/core/postgres:count-dsnapshots-for-dref)
+                            dref-uuids))
+        (assert-equal '() (destore/core/postgres:select-dsnapshots))
+        (assert-true (every (make-emptyp #'destore/core/postgres:select-dsnapshots-for-dref)
+                            dref-uuids))
+        (assert-true (every (make-emptyp #'destore/core/postgres:select-last-dsnapshot-for-dref)
+                            dref-uuids))))))
 
 ;; TODO INSERT-DREF w/ duplicate uuid raises error, not commited, and select-xxx return same results as before
 ;; note that here we're testing the raw PG conditions raised; we'll test the api level conditions elsewhere
 
-
-
-
-
 ;; TODO (DESTORE/CORE/POSTGRES:INSERT-DEVENT-RETURNING )
-
-
 
 ;; TODO snapshot
 

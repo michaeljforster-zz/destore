@@ -74,6 +74,11 @@
       :null
       x))
 
+(defun as-nil (x)
+  (if (eql x :null)
+      nil
+      x))
+
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defmacro with-serializable-isolation (&body body)
     `(progn
@@ -147,7 +152,7 @@
    dref-type)
   :single)
 
-(postmodern:defprepared select-drefs
+(postmodern:defprepared %select-drefs
     (:select 'dref-uuid
              'dref-type
              'version
@@ -155,7 +160,13 @@
              :from 'destore.dref)
   :rows)
 
-(postmodern:defprepared-with-names select-drefs-of-type (dref-type)
+(defun row-elements-as-nil (row)
+  (mapcar #'as-nil row))
+
+(defun select-drefs ()
+  (mapcar #'row-elements-as-nil (%select-drefs)))
+
+(postmodern:defprepared-with-names %select-drefs-of-type (dref-type)
   ((:select 'dref-uuid
             'dref-type
             'version
@@ -165,7 +176,10 @@
    dref-type)
   :rows)
 
-(postmodern:defprepared-with-names select-dref (dref-uuid)
+(defun select-drefs-of-type (dref-type)
+  (mapcar #'row-elements-as-nil (%select-drefs-of-type dref-type)))
+
+(postmodern:defprepared-with-names %select-dref (dref-uuid)
   ((:select 'dref-uuid
             'dref-type
             'version
@@ -175,6 +189,9 @@
    dref-uuid)
   :row)
 
+(defun select-dref (dref-uuid)
+  (row-elements-as-nil (%select-dref dref-uuid)))
+
 (postmodern:defprepared count-devents
     (:select (:count '*) :from 'destore.devent)
   :single)
@@ -182,7 +199,8 @@
 (postmodern:defprepared-with-names count-devents-for-dref-starting (dref-uuid version)
   ((:select (:count '*)
             :from 'destore.devent
-            :where (:= 'dref-uuid '$1))
+            :where (:and (:= 'dref-uuid '$1)
+                          (:>= 'version '$2)))
    dref-uuid
    version)
   :single)
