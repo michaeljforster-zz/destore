@@ -117,9 +117,14 @@ BEGIN
   , latest_version
   , current_timestamp);
 
-  UPDATE destore.dref SET
-    secondary_key_value = the_secondary_key_value
-  , version = latest_version
+  IF the_secondary_key_value IS NOT NULL THEN
+     UPDATE destore.dref
+     SET secondary_key_value = the_secondary_key_value
+     WHERE dref_uuid = the_dref_uuid;
+  END IF;
+
+  UPDATE destore.dref
+  SET version = latest_version
   WHERE dref_uuid = the_dref_uuid;
 
   RETURN latest_version;
