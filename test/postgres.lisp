@@ -57,7 +57,7 @@
     ;; (destore/core/postgres:select-last-dsnapshots-for-dref ...)
     ))
 
-(define-test insert-drefs-successfully
+(define-test insert-drefs-succeeds
   (purge-destore)
   (with-connection
     (let ((dref-uuids '()))
@@ -106,7 +106,7 @@
 ;; note that here we're testing the raw PG conditions raised; we'll test the api level conditions elsewhere
 
 
-(define-test insert-devents-successfully
+(define-test insert-devents-succeeds
   (purge-destore)
   (with-connection
     (let ((dref-uuid (destore/core/postgres:genuuid))
@@ -175,98 +175,6 @@
 ;; TODO (DESTORE/CORE/POSTGRES:INSERT-DEVENT-RETURNING ) and conditions...
 ;; TODO ... denonstrate various invariants, concurrency error, etc.
 
-(define-test insert-dsnapshot-successfully
-  (purge-destore)
-  (with-connection
-    (let ((dref-uuid (destore/core/postgres:genuuid))
-          (devent-uuids (list (destore/core/postgres:genuuid)
-                              (destore/core/postgres:genuuid)
-                              (destore/core/postgres:genuuid))))
-      (destore/core/postgres:insert-dref dref-uuid *dref-type*)
-      (insert-devent-returning dref-uuid
-                               0
-                               "Fred Forster"
-                               (first devent-uuids)
-                               "com.example.devent.user-created"
-                               "IP-ADDR: 192.168.0.100"
-                               "Fred:Forster:Brandon:MB:Canada")
-      (insert-devent-returning dref-uuid
-                               1
-                               nil
-                               (second devent-uuids)
-                               "com.example.devent.user-licensed-vehicle"
-                               "IP-ADDR: 192.168.0.100"
-                               "Harley Davidson:Electra Glide")
-      (insert-devent-returning dref-uuid
-                               2
-                               nil
-                               (third devent-uuids)
-                               "com.example.devent.user-went-driving"
-                               "IP-ADDR: 192.168.0.100"
-                               "Sturgis, Wyoming, Montana")
-      (destore/core/postgres:insert-dsnapshot dref-uuid
-                                              3
-                                              "Fred:Forster:Brandon:MB:Canada:Harley Davidson:Electra Glide:Sturgis, Wyoming, Montana")
-      ;; drefs
-      (assert-equal 1 (destore/core/postgres:count-drefs))
-      (assert-equal 1 (destore/core/postgres:count-drefs-of-type *dref-type*))
-      (assert-equality #'uuid:uuid= dref-uuid (first (first (destore/core/postgres:select-drefs))))
-      (assert-equality #'uuid:uuid= dref-uuid (first (first (destore/core/postgres:select-drefs-of-type *dref-type*))))
-      (assert-equality #'uuid:uuid= dref-uuid (first (destore/core/postgres:select-dref dref-uuid)))
-      ;; devents
-      (assert-equal 3 (destore/core/postgres:count-devents))
-      (assert-equal 3 (destore/core/postgres:count-devents-for-dref-starting dref-uuid 0))
-      (assert-equality #'uuid:uuid=
-                       (first devent-uuids)
-                       (first (first (destore/core/postgres:select-devents))))
-      (assert-equality #'uuid:uuid=
-                       (second devent-uuids)
-                       (first (second (destore/core/postgres:select-devents))))
-      (assert-equality #'uuid:uuid=
-                       (third devent-uuids)
-                       (first (third (destore/core/postgres:select-devents))))
-      (assert-equality #'uuid:uuid=
-                       (first devent-uuids)
-                       (first (first (destore/core/postgres:select-devents-for-dref-starting dref-uuid 0))))
-      (assert-equality #'uuid:uuid=
-                       (second devent-uuids)
-                       (first (second (destore/core/postgres:select-devents-for-dref-starting dref-uuid 0))))
-      (assert-equality #'uuid:uuid=
-                       (third devent-uuids)
-                       (first (third (destore/core/postgres:select-devents-for-dref-starting dref-uuid 0))))
-      ;; snapshots
-      (assert-equal 1 (destore/core/postgres:count-dsnapshots))
-      (assert-equal 1 (destore/core/postgres:count-dsnapshots-for-dref dref-uuid))
-      (assert-equality #'uuid:uuid= dref-uuid (first (first (destore/core/postgres:select-dsnapshots))))
-      (assert-equality #'uuid:uuid= dref-uuid (first (first (destore/core/postgres:select-dsnapshots-for-dref dref-uuid))))
-      (assert-equality #'uuid:uuid= dref-uuid (first (destore/core/postgres:select-last-dsnapshot-for-dref dref-uuid))))))
-
-
-
-
-
-
-;; TODO insert snapshot and conditions...
-
-;; (define-test write-dsnapshot-checks-dstream-uuid
-;;   (purge-destore)
-;;   (create-dstreams)
-;;   (purge-destore)
-;;   (assert-error 'cl-postgres:database-error (with-connection (write-dsnapshot *dstream-a* 1 "{}"))))
-  
-;; (define-test read-last-dsnapshot-reads-last
-;;   (purge-destore)
-;;   (create-dstreams)
-;;   (populate-destore)
-;;   (with-connection
-;;     (dotimes (i 100)
-;;       (write-dsnapshot *dstream-a* (1+ i) "{}")))
-;;   (assert-equal 100 (dsnapshot-version (with-connection (read-last-dsnapshot *dstream-a*)))))
-
-
-
-
-
 ;; (define-test write-devent-checks-dstream-type-key-rolls-back
 ;;   (purge-destore)
 ;;   (create-dstreams)
@@ -312,19 +220,84 @@
 
 
 
-;; (define-test write-dsnapshot-checks-dstream-uuid
-;;   (purge-destore)
-;;   (create-dstreams)
-;;   (purge-destore)
-;;   (assert-error 'cl-postgres:database-error (with-connection (write-dsnapshot *dstream-a* 1 "{}"))))
+
+(define-test insert-dsnapshot-succeeds
+  (purge-destore)
+  (with-connection
+    (let ((dref-uuid (destore/core/postgres:genuuid))
+          (devent-uuids (list (destore/core/postgres:genuuid)
+                              (destore/core/postgres:genuuid)
+                              (destore/core/postgres:genuuid))))
+      (destore/core/postgres:insert-dref dref-uuid *dref-type*)
+      (insert-devent-returning dref-uuid
+                               0
+                               "Fred Forster"
+                               (first devent-uuids)
+                               "com.example.devent.user-created"
+                               "IP-ADDR: 192.168.0.100"
+                               "Fred:Forster:Brandon:MB:Canada")
+      (insert-devent-returning dref-uuid
+                               1
+                               nil
+                               (second devent-uuids)
+                               "com.example.devent.user-licensed-vehicle"
+                               "IP-ADDR: 192.168.0.100"
+                               "Harley Davidson:Electra Glide")
+      (destore/core/postgres:insert-dsnapshot dref-uuid
+                                              2
+                                              "Fred:Forster:Brandon:MB:Canada:Harley Davidson:Electra Glide")
+      (insert-devent-returning dref-uuid
+                               2
+                               nil
+                               (third devent-uuids)
+                               "com.example.devent.user-went-driving"
+                               "IP-ADDR: 192.168.0.100"
+                               "Sturgis, Wyoming, Montana")
+      (destore/core/postgres:insert-dsnapshot dref-uuid
+                                              3
+                                              "Fred:Forster:Brandon:MB:Canada:Harley Davidson:Electra Glide:Sturgis, Wyoming, Montana")
+      ;; drefs
+      (assert-equal 1 (destore/core/postgres:count-drefs))
+      (assert-equal 1 (destore/core/postgres:count-drefs-of-type *dref-type*))
+      (assert-equality #'uuid:uuid= dref-uuid (first (first (destore/core/postgres:select-drefs))))
+      (assert-equality #'uuid:uuid= dref-uuid (first (first (destore/core/postgres:select-drefs-of-type *dref-type*))))
+      (assert-equality #'uuid:uuid= dref-uuid (first (destore/core/postgres:select-dref dref-uuid)))
+      ;; devents
+      (assert-equal 3 (destore/core/postgres:count-devents))
+      (assert-equal 3 (destore/core/postgres:count-devents-for-dref-starting dref-uuid 0))
+      (assert-equality #'uuid:uuid=
+                       (first devent-uuids)
+                       (first (first (destore/core/postgres:select-devents))))
+      (assert-equality #'uuid:uuid=
+                       (second devent-uuids)
+                       (first (second (destore/core/postgres:select-devents))))
+      (assert-equality #'uuid:uuid=
+                       (third devent-uuids)
+                       (first (third (destore/core/postgres:select-devents))))
+      (assert-equality #'uuid:uuid=
+                       (first devent-uuids)
+                       (first (first (destore/core/postgres:select-devents-for-dref-starting dref-uuid 0))))
+      (assert-equality #'uuid:uuid=
+                       (second devent-uuids)
+                       (first (second (destore/core/postgres:select-devents-for-dref-starting dref-uuid 0))))
+      (assert-equality #'uuid:uuid=
+                       (third devent-uuids)
+                       (first (third (destore/core/postgres:select-devents-for-dref-starting dref-uuid 0))))
+      ;; snapshots
+      (assert-equal 2 (destore/core/postgres:count-dsnapshots))
+      (assert-equal 2 (destore/core/postgres:count-dsnapshots-for-dref dref-uuid))
+      (assert-true (every #'(lambda (row) (uuid:uuid= dref-uuid (first row)))
+                          (destore/core/postgres:select-dsnapshots)))
+      (assert-true (every #'(lambda (row) (uuid:uuid= dref-uuid (first row)))
+                          (destore/core/postgres:select-dsnapshots-for-dref dref-uuid)))
+      (assert-equality #'uuid:uuid= dref-uuid (first (destore/core/postgres:select-last-dsnapshot-for-dref dref-uuid)))
+      (assert-equal 3 (second (destore/core/postgres:select-last-dsnapshot-for-dref dref-uuid))))))
 
 
-
-;; (define-test read-last-dsnapshot-reads-last
-;;   (purge-destore)
-;;   (create-dstreams)
-;;   (populate-destore)
-;;   (with-connection
-;;     (dotimes (i 100)
-;;       (write-dsnapshot *dstream-a* (1+ i) "{}")))
-;;   (assert-equal 100 (dsnapshot-version (with-connection (read-last-dsnapshot *dstream-a*)))))
+(define-test insert-dsnapshot-fails-on-nonexistent-dref
+  (purge-destore)
+  (with-connection
+    (assert-error 'cl-postgres:database-error
+                  (destore/core/postgres:insert-dsnapshot (destore/core/postgres:genuuid)
+                                                          3
+                                                          "Fred:Forster:Brandon:MB:Canada:Harley Davidson:Electra Glide:Sturgis, Wyoming, Montana"))))
