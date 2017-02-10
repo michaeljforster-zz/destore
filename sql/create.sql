@@ -32,9 +32,10 @@ CREATE SCHEMA destore;
 -- associated devents.  The dref and its type are recorded here. The
 -- dref version must match that of the latest devent associated with
 -- the dref (see destore.devent.version); the version serves as an
--- optimistic concurrency check (see destore.write_devent()).
--- Together, dref_type and secondary_key_value support an optional
--- secondary key for the aggregate (see destore.write_devent()).
+-- optimistic concurrency check (see
+-- destore.insert_devent_returning()).  Together, dref_type and
+-- secondary_key_value support an optional secondary key for the
+-- aggregate (see destore.insert_devent_returning()).
 
 CREATE TABLE destore.dref
 ( dref_uuid uuid PRIMARY KEY
@@ -133,9 +134,8 @@ $$ LANGUAGE plpgsql;
 -- devents, using the dsnapshot as a starting point.
 -- 
 -- The dsnapshot version must match that of the latest devent used to
--- create the dref's dsnapshot (see
--- destore.dref.version). Betware that this is not enforced by the
--- database design.
+-- create the dref's dsnapshot (see destore.dref.version). Betware
+-- that this is not enforced by the database design.
 
 CREATE TABLE destore.dsnapshot
 ( dref_uuid uuid NOT NULL
@@ -147,34 +147,25 @@ CREATE TABLE destore.dsnapshot
 , PRIMARY KEY (dref_uuid, version)
 );
 
--- TODO CREATE OR REPLACE FUNCTION destore.write_dsnapshot
--- ( the_dref_uuid uuid
--- , the_version integer
--- , the_payload text) -- jsbonb not available in 9.3
--- RETURNS void AS $$
--- DECLARE
---   exists_dref boolean;
--- BEGIN
---   exists_dref = EXISTS (SELECT true FROM destore.dref
---                    WHERE dref_uuid = the_dref_uuid);
--- 
---   -- Be more explicity than relying upon NOT NULL check.
---   IF NOT exists_dref THEN
---     RAISE EXCEPTION 'Nonexistent dref: UUID = %', the_dref_uuid;
---   END IF;
--- 
---   INSERT INTO destore.dsnapshot
---   (dref_uuid, version, payload, stored_when)
---   VALUES
---   (the_dref_uuid, the_version, the_payload, current_timestamp);
--- END;
--- $$ LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION destore.insert_dsnapshot
+( the_dref_uuid uuid
+, the_version integer
+, the_payload text)
+RETURNS void AS $$
+DECLARE
+  exists_dref boolean;
+BEGIN
+  exists_dref = EXISTS (SELECT true FROM destore.dref
+                WHERE dref_uuid = the_dref_uuid);
 
--- CREATE OR REPLACE FUNCTION destore.read_last_dsnapshot
--- (the_dref_uuid uuid)
--- RETURNS SETOF destore.dsnapshot AS $$
---   SELECT dref_uuid, version, payload, stored_when
---   FROM destore.dsnapshot
---   ORDER BY version DESC
---   LIMIT 1
--- $$ LANGUAGE sql;
+  -- Be more explicit than relying upon the NOT NULL check.
+  IF NOT exists_dref THEN
+    RAISE EXCEPTION 'Nonexistent dref: UUID = %', the_dref_uuid;
+  END IF;
+
+  INSERT INTO destore.dsnapshot
+  (dref_uuid, version, payload, stored_when)
+  VALUES
+  (the_dref_uuid, the_version, the_payload, current_timestamp);
+END;
+$$ LANGUAGE plpgsql;
