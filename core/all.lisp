@@ -24,6 +24,4 @@
 
 (uiop:define-package "DESTORE/CORE/ALL"
   (:nicknames "DESTORE/CORE")
-  (:use-reexport "DESTORE/CORE/POSTGRES"
-                 ;; "DESTORE/CORE/HIGH-LEVEL"
-                 ))
+  (:use-reexport "DESTORE/CORE/API"))
