@@ -32,7 +32,7 @@
            "WITH-SERIALIZABLE-ISOLATION"
            "INSERT-DREF"
            "INSERT-DEVENT-RETURNING"
-           ;; TODO "WRITE-DSNAPSHOT"
+           "INSERT-DSNAPSHOT"
            "COUNT-DREFS"
            "COUNT-DREFS-OF-TYPE"
            "SELECT-DREFS"
@@ -137,6 +137,17 @@
                               metadata
                               payload)))
 
+(postmodern:defprepared-with-names %insert-dsnapshot (dref-uuid version payload)
+  ((:select (:destore.insert-dsnapshot '$1 '$2 '$3))
+   dref-uuid
+   version
+   payload)
+  :none)
+
+(defun insert-dsnapshot (dref-uuid version payload)
+  (with-serializable-isolation
+    (%insert-dsnapshot dref-uuid version payload)))
+
 ;;; Regarding the -OF-TYPE variants of the functions below,
 ;;; POSTMODERN:DEFPREPARED-WITH-NAMES does support a full lambda list,
 ;;; with keyword parameters. However, it's simpler to write a wrapper
@@ -236,28 +247,6 @@
    dref-uuid
    version)
   :rows)
-
-;; TODO select-last-dsnapshot
-
-;; (postmodern:defprepared-with-names %write-dsnapshot (dstream version payload)
-;;   ((:select (:destore.write-dsnapshot '$1 '$2 '$3))
-;;    (dstream-uuid dstream)
-;;    version
-;;    payload)
-;;   :none)
-
-;; (defun write-dsnapshot (dstream version payload)
-;;   (with-serializable-isolation
-;;     (%write-dsnapshot dstream version payload)))
-
-;; (postmodern:defprepared-with-names read-last-dsnapshot (dstream)
-;;   ((:select 'dstream-uuid
-;;             'version
-;;             'payload
-;;             'stored-when
-;;             :from (:destore.read-last-dsnapshot '$1))
-;;    (dstream-uuid dstream))
-;;   :dsnapshot)
 
 (postmodern:defprepared count-dsnapshots
     (:select (:count '*) :from 'destore.dsnapshot)
