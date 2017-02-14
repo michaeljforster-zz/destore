@@ -31,7 +31,7 @@
   :version "0.0.1"
   :class :package-inferred-system
   :defsystem-depends-on ("asdf-package-system")
-  :depends-on ("destore/core/all"
+  :depends-on ("destore/core/main"
                ;; cl-postgres+local-time requires that the LOCAL-TIME
                ;; and CL-POSTGRES packages be loaded to correctly
                ;; patch LOCAL-TIME. Thus, we must specify the

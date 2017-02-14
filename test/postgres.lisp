@@ -87,7 +87,7 @@
                               dref-uuids))
           ;; snapshots
           (assert-equal 0 (count-dsnapshots))
-          (assert-true (every (make-zerop #'count-dsnapshots-forlast-dsnapshot-for-dref)
+          (assert-true (every (make-zerop #'count-dsnapshots-for-dref)
                               dref-uuids))
           (assert-equal '() (select-dsnapshots))
           (assert-true (every (make-emptyp #'select-dsnapshots-for-dref)

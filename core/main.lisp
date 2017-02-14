@@ -1,4 +1,4 @@
-;;;; core/api.lisp
+;;;; core/main.lisp
 
 ;;; The MIT License (MIT)
 ;;;
@@ -24,9 +24,10 @@
 
 ;;; This module provides the API for the destore.
 
-(defpackage "DESTORE/CORE/API"
-  (:use "CL"
-         "DESTORE/CORE/POSTGRES")
+(defpackage "DESTORE/CORE/MAIN"
+  (:nicknames "DESTORE/CORE")
+  (:use "CL")
+  (:import-from "DESTORE/CORE/POSTGRES")
   (:export "CREATE-DREF"
            "COUNT-DREFS"
            "LIST-DREFS"
@@ -38,13 +39,13 @@
            "RECONSTITUTE"
            "PROJECT"))
 
-(in-package "DESTORE/CORE/API")
+(in-package "DESTORE/CORE/MAIN")
 
 (defstruct dref uuid type)
 
 (defun create-dref (dref-type)
-  (let ((dref-uuid (genuuid)))
-    (insert-dref dref-uuid dref-type)
+  (let ((dref-uuid (destore/core/postgres:genuuid)))
+    (destore/core/postgres:insert-dref dref-uuid dref-type)
     dref-uuid))
 
 (defun row-to-dref (row)
@@ -52,35 +53,35 @@
 
 (defun count-drefs (&optional dref-type)
   (if (null dref-type)
-      (%count-drefs)
-      (%count-drefs-of-type dref-type)))
+      (destore/core/postgres:count-drefs)
+      (destore/core/postgres:count-drefs-of-type dref-type)))
 
 (defun list-drefs (&key dref-type)
   (if (null dref-type)
-      (mapcar #'row-to-dref (select-drefs))
-      (mapcar #'row-to-dref (select-drefs-of-type dref-type))))
+      (mapcar #'row-to-dref (destore/core/postgres:select-drefs))
+      (mapcar #'row-to-dref (destore/core/postgres:select-drefs-of-type dref-type))))
 
 (defun find-dref (dref-uuid)
-  (row-to-dref (select-dref dref-uuid)))
+  (row-to-dref (destore/core/postgres:select-dref dref-uuid)))
 
 (defun record-devent (dref expected-version devent-type payload &key secondary-key-value metadata)
-  (let ((devent-uuid (genuuid)))
-    (let ((version (insert-devent-returning (dref-uuid dref)
-                                            expected-version
-                                            secondary-key-value
-                                            devent-uuid
-                                            devent-type
-                                            metadata
-                                            payload)))
+  (let ((devent-uuid (destore/core/postgres:genuuid)))
+    (let ((version (destore/core/postgres:insert-devent-returning (dref-uuid dref)
+                                                                  expected-version
+                                                                  secondary-key-value
+                                                                  devent-uuid
+                                                                  devent-type
+                                                                  metadata
+                                                                  payload)))
       (values devent-uuid version))))
 
 (defun count-devents (&optional dref-uuid (version 1))
   (if (null dref-uuid)
-      (count-devents)
-      (count-devents-for-dref-starting dref-uuid version)))
+      (destore/core/postgres:count-devents)
+      (destore/core/postgres:count-devents-for-dref-starting dref-uuid version)))
 
 (defun reduce-devents (function initial-value dref-uuid start-version)
-  (let ((history (select-devents-for-dref-starting dref-uuid start-version))
+  (let ((history (destore/core/postgres:select-devents-for-dref-starting dref-uuid start-version))
         (last-version (max 0 start-version)))
     (flet ((reducer (accumulator next)
              (let ((devent-uuid (nth 0 next))
@@ -118,20 +119,20 @@
       (third row)))
 
 (defun snapshot (dref function initial-value)
-  (let ((last-dsnapshot (select-dsnapshots (dref-uuid dref) t)))
+  (let ((last-dsnapshot (destore/core/postgres:select-dsnapshots (dref-uuid dref) t)))
     (let ((initial-value (dsnapshot-payload last-dsnapshot initial-value))
           (start-version (1+ (dsnapshot-version last-dsnapshot 0))))
       (multiple-value-bind (payload version)
           (reduce-devents function initial-value dref start-version)
-        (insert-dsnapshot (dref-uuid dref) version payload)))))
+        (destore/core/postgres:insert-dsnapshot (dref-uuid dref) version payload)))))
 
 (defun count-snapshots (&optional dref-uuid)
   (if (null dref-uuid)
-      (count-dsnapshots)
-      (count-dsnapshots-for-dref dref-uuid)))
+      (destore/core/postgres:count-dsnapshots)
+      (destore/core/postgres:count-dsnapshots-for-dref dref-uuid)))
 
 (defun reconstitute (dref function initial-value)
-  (let ((last-dsnapshot (select-dsnapshots (dref-uuid dref) t)))
+  (let ((last-dsnapshot (destore/core/postgres:select-dsnapshots (dref-uuid dref) t)))
     (let ((initial-value (dsnapshot-payload last-dsnapshot initial-value))
           (start-version (1+ (dsnapshot-version last-dsnapshot 0))))
       (reduce-devents function initial-value dref start-version))))
