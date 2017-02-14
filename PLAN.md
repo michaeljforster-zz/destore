@@ -16,14 +16,81 @@
         SET SEARCH_PATH = destore, "$user", public;
 
 
+- docstrings in api.lisp
 
 
 
-  - handling serialization failures, SQLSTATE value of '40001'
 
-  - handling concurrency faiures, Database error P0001: Concurrency problem: latest_version 1; expected_version 0
+**CONDITIONS**
 
-  - WRITE-DEVENT can signal "Nonexistent dstream" or "Concurrency Problem" or "Unique Violation"
+Goal is to wrap any PG errors with DESTORE specific conditions...
+
+
+- CREATE-DREF
+  - TODO check-type
+  - insert-dref
+    - CL-POSTGRES-ERROR:CHECK-VIOLATION on "dref_dref_type_check"
+    - CL-POSTGRES-ERROR:UNIQUE-VIOLATION (dref-type secondary-key-value)
+    - CL-POSTGRES:DATABASE-ERROR on "serialization failures, SQLSTATE value of '40001'"
+  
+
+- RECORD-DEVENT
+  - TODO check-type
+  - insert-devent-returning
+    - CL-POSTGRES-ERROR:CHECK-VIOLATION on "devent_devent_type_check"
+    - CL-POSTGRES:DATABASE-ERROR on "Nonexistent dref: UUID = " (in lieu of a FOREIGN-KEY-VIOLATION)
+    - CL-POSTGRES:DATABASE-ERROR on "P0001: Concurrency problem: latest_version 1; expected_version 0"
+    - CL-POSTGRES:DATABASE-ERROR on "serialization failures, SQLSTATE value of '40001'"
+  
+
+- SNAPSHOT
+  - TODO check-type
+  - select-dsnapshots
+    - dref-uuid or lastp if provided
+  - reduce-devents
+    - select-devents
+  - insert-dsnapshot
+    - CL-POSTGRES-ERROR:FOREIGN-KEY-VIOLATION on "dsnapshot_dref_uuid_fkey"
+    - CL-POSTGRES-ERROR:UNIQUE-VIOLATION (dref-uuid version)
+    - CL-POSTGRES:DATABASE-ERROR on "serialization failures, SQLSTATE value of '40001'"
+
+
+
+- FIND-DREF
+  - select-dref
+    - bad dref-uuid
+
+- LIST-DREFS
+  - select-drefs
+    - bad dref-type if provided  
+
+- COUNT-DREFS
+
+- COUNT-DEVENTS
+  - count-devents - bad dref-uuid or version if provided
+
+- COUNT-DSNAPSHOTS
+  - count-dsnapshots - dref-uuid if provided
+
+
+
+- RECONSTITUTE
+  - TODO check-type
+  - select-dsnapshots
+    - dref-uuid or lastp if provided
+  - reduce-devents
+    - select-devents
+      - bad dref-uuid or version if provided
+
+
+- PROJECT
+  - TODO check-type
+  - reduce-devents
+    - select-devents
+      - bad dref-uuid or version if provided
+
+
+
 
 
 

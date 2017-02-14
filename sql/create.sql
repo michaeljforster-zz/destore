@@ -160,14 +160,6 @@ RETURNS void AS $$
 DECLARE
   exists_dref boolean;
 BEGIN
-  exists_dref = EXISTS (SELECT true FROM destore.dref
-                WHERE dref_uuid = the_dref_uuid);
-
-  -- Be more explicit than relying upon the NOT NULL check.
-  IF NOT exists_dref THEN
-    RAISE EXCEPTION 'Nonexistent dref: UUID = %', the_dref_uuid;
-  END IF;
-
   INSERT INTO destore.dsnapshot
   (dref_uuid, version, payload, stored_when)
   VALUES

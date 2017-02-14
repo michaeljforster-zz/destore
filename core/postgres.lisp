@@ -22,6 +22,11 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ;;; SOFTWARE.
 
+;;; This module provides a thin wrapper around the PostgreSQL database
+;;; that implements the destore. The objective here is to expose the
+;;; DML and SQL as a Lispy substrate for testing and to implement the
+;;; API.
+
 (defpackage "DESTORE/CORE/POSTGRES"
   (:use "CL")
   (:import-from "UUID")
@@ -29,24 +34,25 @@
   (:import-from "POSTMODERN")
   (:import-from "POSTMODERNITY")
   (:export "GENUUID"
-           "WITH-SERIALIZABLE-ISOLATION"
            "INSERT-DREF"
            "INSERT-DEVENT-RETURNING"
            "INSERT-DSNAPSHOT"
            "COUNT-DREFS"
+           "COUNT-DREFS-OF-TYPE"
            "SELECT-DREFS"
+           "SELECT-DREFS-OF-TYPE"
            "SELECT-DREF"
            "COUNT-DEVENTS"
+           "COUNT-DEVENTS-FOR-DREF-STARTING"
            "SELECT-DEVENTS"
+           "SELECT-DEVENTS-FOR-DREF-STARTING"
            "COUNT-DSNAPSHOTS"
+           "COUNT-DSNAPSHOTS-FOR-DREF"
            "SELECT-DSNAPSHOTS"
-           "SELECT-LAST-DSNAPSHOT"))
+           "SELECT-DSNAPSHOTS-FOR-DREF"
+           "SELECT-LAST-DSNAPSHOT-FOR-DREF"))
 
 (in-package "DESTORE/CORE/POSTGRES")
-
-;;; This module provides a thin wrapper around the PostgreSQL
-;;; database, exposing the DML and SQL that is expected to be used and
-;;; for testing the behaviour at the Common Lisp level.
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (local-time:set-local-time-cl-postgres-readers))
@@ -86,7 +92,7 @@
            (unless transaction-finished-p
              (postmodern:execute "ROLLBACK")))))))
 
-(postmodern:defprepared-with-names insert-dref (dref-uuid dref-type)
+(postmodern:defprepared-with-names %insert-dref (dref-uuid dref-type)
   ((:insert-into 'destore.dref :set
                  'dref-uuid '$1
                  'dref-type '$2
@@ -97,6 +103,10 @@
    0
    (as-db-null nil))
   :none)
+
+(defun insert-dref (dref-uuid dref-type)
+  (with-serializable-isolation
+      (%insert-dref dref-uuid dref-type)))
 
 (postmodern:defprepared-with-names %insert-devent-returning (dref-uuid
                                                              expected-version
@@ -145,24 +155,14 @@
 (defun row-elements-as-nil (row)
   (mapcar #'as-nil row))
 
-;;; Note that POSTMODERN:DEFPREPARED-WITH-NAMES does support a full
-;;; lambda list, with keyword parameters. However, it's simpler to
-;;; write a wrapper with a keyword parameter and that calls one of
-;;; the appropriate internal helper.
-
-(postmodern:defprepared %count-drefs
+(postmodern:defprepared count-drefs
     (:select (:count '*) :from 'destore.dref)
   :single)
 
-(postmodern:defprepared-with-names %count-drefs-of-type (dref-type)
+(postmodern:defprepared-with-names count-drefs-of-type (dref-type)
   ((:select (:count '*) :from 'destore.dref :where (:= 'dref-type '$1))
    dref-type)
   :single)
-
-(defun count-drefs (&optional dref-type)
-  (if (null dref-type)
-      (%count-drefs)
-      (%count-drefs-of-type dref-type)))
 
 (postmodern:defprepared %select-drefs
     (:select 'dref-uuid
@@ -171,6 +171,9 @@
              'secondary-key-value
              :from 'destore.dref)
   :rows)
+
+(defun select-drefs ()
+  (mapcar #'row-elements-as-nil (%select-drefs)))
 
 (postmodern:defprepared-with-names %select-drefs-of-type (dref-type)
   ((:select 'dref-uuid
@@ -182,10 +185,8 @@
    dref-type)
   :rows)
 
-(defun select-drefs (&optional dref-type)
-  (if (null dref-type)
-      (mapcar #'row-elements-as-nil (%select-drefs))
-      (mapcar #'row-elements-as-nil (%select-drefs-of-type dref-type))))
+(defun select-drefs-of-type (dref-uuid)
+  (mapcar #'row-elements-as-nil (%select-drefs-of-type dref-uuid)))
 
 (postmodern:defprepared-with-names %select-dref (dref-uuid)
   ((:select 'dref-uuid
@@ -200,11 +201,11 @@
 (defun select-dref (dref-uuid)
   (row-elements-as-nil (%select-dref dref-uuid)))
 
-(postmodern:defprepared %count-devents
+(postmodern:defprepared count-devents
     (:select (:count '*) :from 'destore.devent)
   :single)
 
-(postmodern:defprepared-with-names %count-devents-for-dref-starting (dref-uuid version)
+(postmodern:defprepared-with-names count-devents-for-dref-starting (dref-uuid version)
   ((:select (:count '*)
             :from 'destore.devent
             :where (:and (:= 'dref-uuid '$1)
@@ -213,12 +214,7 @@
    version)
   :single)
 
-(defun count-devents (&optional dref-uuid (version 1))
-  (if (null dref-uuid)
-      (%count-devents)
-      (%count-devents-for-dref-starting dref-uuid version)))
-
-(postmodern:defprepared %select-devents
+(postmodern:defprepared select-devents
     (:order-by
      (:select 'devent-uuid
               'devent-type
@@ -232,7 +228,7 @@
      'sequence-no)
   :rows)
 
-(postmodern:defprepared-with-names %select-devents-for-dref-starting (dref-uuid version)
+(postmodern:defprepared-with-names select-devents-for-dref-starting (dref-uuid version)
   ((:order-by
     (:select 'devent-uuid
              'devent-type
@@ -250,42 +246,27 @@
    version)
   :rows)
 
-(defun select-devents (&optional dref-uuid (version 1))
-  (if (null dref-uuid)
-      (%select-devents)
-      (%select-devents-for-dref-starting dref-uuid version)))
-
-(postmodern:defprepared %count-dsnapshots
+(postmodern:defprepared count-dsnapshots
     (:select (:count '*) :from 'destore.dsnapshot)
   :single)
 
-(postmodern:defprepared-with-names %count-dsnapshots-for-dref (dref-uuid)
+(postmodern:defprepared-with-names count-dsnapshots-for-dref (dref-uuid)
   ((:select (:count '*) :from 'destore.dsnapshot :where (:= 'dref-uuid '$1))
    dref-uuid)
   :single)
 
-(defun count-dsnapshots (&optional dref-uuid)
-  (if (null dref-uuid)
-      (%count-dsnapshots)
-      (%count-dsnapshots-for-dref dref-uuid)))
-
-(postmodern:defprepared %select-dsnapshots
+(postmodern:defprepared select-dsnapshots
     (:select 'dref-uuid 'version 'payload 'stored-when :from 'destore.dsnapshot)
   :rows)
 
-(postmodern:defprepared-with-names %select-dsnapshots-for-dref (dref-uuid)
+(postmodern:defprepared-with-names select-dsnapshots-for-dref (dref-uuid)
   ((:select 'dref-uuid 'version 'payload 'stored-when
             :from 'destore.dsnapshot
             :where (:= 'dref-uuid '$1))
    dref-uuid)
   :rows)
 
-(defun select-dsnapshots (&optional dref-uuid)
-  (if (null dref-uuid)
-      (%select-dsnapshots)
-      (%select-dsnapshots-for-dref dref-uuid)))
-
-(postmodern:defprepared-with-names select-last-dsnapshot (dref-uuid)
+(postmodern:defprepared-with-names select-last-dsnapshot-for-dref (dref-uuid)
   ((:limit
     (:order-by
      (:select 'dref-uuid 'version 'payload 'stored-when

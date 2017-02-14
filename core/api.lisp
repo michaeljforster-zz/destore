@@ -22,50 +22,23 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 ;;; SOFTWARE.
 
+;;; This module provides the API for the destore.
+
 (defpackage "DESTORE/CORE/API"
   (:use "CL"
          "DESTORE/CORE/POSTGRES")
   (:export "CREATE-DREF"
+           "COUNT-DREFS"
            "LIST-DREFS"
-           "RECORD"
-           "RECONSTITUTE"
+           "FIND-DREF"
+           "RECORD-DEVENT"
+           "COUNT-DEVENTS"
            "SNAPSHOT"
+           "COUNT-DSNAPSHOTS"
+           "RECONSTITUTE"
            "PROJECT"))
 
 (in-package "DESTORE/CORE/API")
-
-;; NOTE: in this layer, we handle a dref as a UUID and type--symmetry
-;; with creation; provides neither version nor secondary-key, which
-;; will be provided--when essential--during reconstitution or
-;; projection.
-
-(defun reduce-devents (function initial-value dref-uuid start-version)
-  (let ((history (select-devents dref-uuid start-version))
-        (last-version (max 0 start-version)))
-    (flet ((reducer (accumulator next)
-             (let ((devent-uuid (nth 0 next))
-                   (devent-type (nth 1 next))
-                   (metadata (nth 2 next))
-                   (payload (nth 3 next))
-                   ;; (dref-uuid (nth 4 next))
-                   (version (nth 5 next))
-                   ;; (stored-when (nth 6 next))
-                   ;; (sequence-no (nth 7 next))
-                   )
-               (setf last-version version)
-               (funcall function
-                        accumulator
-                        devent-uuid
-                        devent-type
-                        metadata
-                        payload
-                        ;; dref-uuid
-                        version
-                        ;; stored-when
-                        ;; sequence-no
-                        ))))
-      (let ((result (reduce #'reducer history :initial-value initial-value)))
-        (values result last-version)))))
 
 (defstruct dref uuid type)
 
@@ -77,10 +50,20 @@
 (defun row-to-dref (row)
   (make-dref :uuid (first row) :type (second row)))
 
-(defun list-drefs (&key dref-type)
-  (mapcar #'row-to-dref (select-drefs dref-type)))
+(defun count-drefs (&optional dref-type)
+  (if (null dref-type)
+      (%count-drefs)
+      (%count-drefs-of-type dref-type)))
 
-(defun record (dref expected-version devent-type payload &key secondary-key-value metadata)
+(defun list-drefs (&key dref-type)
+  (if (null dref-type)
+      (mapcar #'row-to-dref (select-drefs))
+      (mapcar #'row-to-dref (select-drefs-of-type dref-type))))
+
+(defun find-dref (dref-uuid)
+  (row-to-dref (select-dref dref-uuid)))
+
+(defun record-devent (dref expected-version devent-type payload &key secondary-key-value metadata)
   (let ((devent-uuid (genuuid)))
     (let ((version (insert-devent-returning (dref-uuid dref)
                                             expected-version
@@ -90,6 +73,39 @@
                                             metadata
                                             payload)))
       (values devent-uuid version))))
+
+(defun count-devents (&optional dref-uuid (version 1))
+  (if (null dref-uuid)
+      (count-devents)
+      (count-devents-for-dref-starting dref-uuid version)))
+
+(defun reduce-devents (function initial-value dref-uuid start-version)
+  (let ((history (select-devents-for-dref-starting dref-uuid start-version))
+        (last-version (max 0 start-version)))
+    (flet ((reducer (accumulator next)
+             (let ((devent-uuid (nth 0 next))
+                   (devent-type (nth 1 next))
+                   (metadata (nth 2 next))
+                   (payload (nth 3 next))
+                   ;; (dref-uuid (nth 4 next)) ; hidden detail
+                   (version (nth 5 next))
+                   ;; (stored-when (nth 6 next)) ; hidden detail
+                   ;; (sequence-no (nth 7 next)) ; hidden detail
+                   )
+               (setf last-version version)
+               (funcall function
+                        accumulator
+                        devent-uuid
+                        devent-type
+                        metadata
+                        payload
+                        ;; dref-uuid ; hidden detail
+                        version
+                        ;; stored-when ; hidden detail
+                        ;; sequence-no ; hidden detail
+                        ))))
+      (let ((result (reduce #'reducer history :initial-value initial-value)))
+        (values result last-version)))))
 
 (defun dsnapshot-version (row default)
   (if (null row)
@@ -101,19 +117,24 @@
       default
       (third row)))
 
-(defun reconstitute (dref function initial-value)
-  (let ((last-dsnapshot (select-last-dsnapshot (dref-uuid dref))))
-    (let ((initial-value (dsnapshot-payload last-dsnapshot initial-value))
-          (start-version (1+ (dsnapshot-version last-dsnapshot 0))))
-      (reduce-devents function initial-value dref start-version))))
-
 (defun snapshot (dref function initial-value)
-  (let ((last-dsnapshot (select-last-dsnapshot (dref-uuid dref))))
+  (let ((last-dsnapshot (select-dsnapshots (dref-uuid dref) t)))
     (let ((initial-value (dsnapshot-payload last-dsnapshot initial-value))
           (start-version (1+ (dsnapshot-version last-dsnapshot 0))))
       (multiple-value-bind (payload version)
           (reduce-devents function initial-value dref start-version)
         (insert-dsnapshot (dref-uuid dref) version payload)))))
+
+(defun count-snapshots (&optional dref-uuid)
+  (if (null dref-uuid)
+      (count-dsnapshots)
+      (count-dsnapshots-for-dref dref-uuid)))
+
+(defun reconstitute (dref function initial-value)
+  (let ((last-dsnapshot (select-dsnapshots (dref-uuid dref) t)))
+    (let ((initial-value (dsnapshot-payload last-dsnapshot initial-value))
+          (start-version (1+ (dsnapshot-version last-dsnapshot 0))))
+      (reduce-devents function initial-value dref start-version))))
 
 (defun project (dref function initial-value &key (start-version 1))
   (reduce-devents function initial-value dref start-version))
